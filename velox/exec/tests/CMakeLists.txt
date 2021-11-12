@@ -56,6 +56,7 @@ add_executable(
   OrderByTest.cpp
   MergeTest.cpp
   HashJoinTest.cpp
+  HybridExecOperatorTest.cpp
   PlanNodeToStringTest.cpp
   FunctionSignatureBuilderTest.cpp
   UnnestTest.cpp)

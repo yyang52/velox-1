@@ -19,7 +19,7 @@ add_library(velox_config Context.cpp)
 target_link_libraries(velox_config ${FOLLY_WITH_DEPENDENCIES})
 
 add_library(velox_core FunctionRegistry.cpp PlanNode.cpp ScalarFunction.cpp
-                       CancelPool.cpp)
+                       CancelPool.cpp HybridPlanNode.cpp)
 
 target_link_libraries(velox_core velox_config velox_type velox_serialization
                       velox_vector ${FOLLY_WITH_DEPENDENCIES})

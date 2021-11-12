@@ -29,6 +29,7 @@ add_library(
   HashProbe.cpp
   HashStringAllocator.cpp
   HashTable.cpp
+  HybridExecOperator.cpp
   JoinBridge.cpp
   Limit.cpp
   LocalPartition.cpp
