@@ -32,6 +32,10 @@ class VeloxToCiderExprConverter {
   std::vector<std::shared_ptr<const Analyzer::Expr>> toVeloxExpr(
       std::vector<std::shared_ptr<const ITypedExpr>> v_expr) const;
 
+  std::shared_ptr<Analyzer::Expr> wrap_expr_with_cast(
+      const std::shared_ptr<Analyzer::Expr> c_expr,
+      std::shared_ptr<const Type> type) const;
+
  private:
   std::shared_ptr<Analyzer::Expr> toCiderExpr(
       std::shared_ptr<const ConstantTypedExpr> v_expr) const;
@@ -56,4 +60,4 @@ class VeloxToCiderExprConverter {
       std::shared_ptr<const CastTypedExpr> v_expr,
       std::unordered_map<std::string, int> col_info) const;
 };
-} // namespace facebook::presto
+} // namespace facebook::velox::cider

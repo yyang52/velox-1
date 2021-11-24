@@ -12,9 +12,9 @@
  * limitations under the License.
  */
 
-#include "core/PlanNode.h"
-#include "cider/VeloxToCiderExpr.h"
 #include "QueryEngine/RelAlgExecutionUnit.h"
+#include "cider/VeloxToCiderExpr.h"
+#include "core/PlanNode.h"
 
 namespace facebook::velox::cider {
 
@@ -23,7 +23,8 @@ constexpr char const* EMPTY_QUERY_PLAN = "";
 
 class CiderExecutionUnitGenerator {
  public:
-  explicit CiderExecutionUnitGenerator() : ciderExprConverter_() {}
+  explicit CiderExecutionUnitGenerator()
+      : ciderExprConverter_(), exprMaskMap_{} {}
 
   std::shared_ptr<RelAlgExecutionUnit> createExecutionUnit(
       const std::shared_ptr<const velox::core::PlanNode>& node);
@@ -31,6 +32,10 @@ class CiderExecutionUnitGenerator {
  private:
   void createOrUpdateExecutionUnit(
       const std::shared_ptr<const velox::core::TableScanNode>& node,
+      std::shared_ptr<RelAlgExecutionUnit>& exe_unit);
+
+  void createOrUpdateExecutionUnit(
+      const std::shared_ptr<const velox::core::ValuesNode>& node,
       std::shared_ptr<RelAlgExecutionUnit>& exe_unit);
 
   void createOrUpdateExecutionUnit(
@@ -46,6 +51,8 @@ class CiderExecutionUnitGenerator {
       std::shared_ptr<RelAlgExecutionUnit>& exe_unit);
 
   VeloxToCiderExprConverter ciderExprConverter_;
+  std::vector<std::pair<std::string, std::shared_ptr<Analyzer::Expr>>>
+      exprMaskMap_;
 };
 
-} // namespace facebook::presto
+} // namespace facebook::velox::cider
