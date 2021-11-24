@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
+#include "velox/exec/HybridExecOperator.h"
+#include <folly/init/Init.h>
+#include "velox/core/HybridPlanNode.h"
 #include "velox/dwio/dwrf/test/utils/BatchMaker.h"
+#include "velox/exec/Driver.h"
 #include "velox/exec/tests/OperatorTestBase.h"
 #include "velox/exec/tests/PlanBuilder.h"
-#include "velox/core/HybridPlanNode.h"
-#include "velox/exec/HybridExecOperator.h"
-#include "velox/exec/Driver.h"
-#include <folly/init/Init.h>
-
 
 using namespace facebook::velox;
 using namespace facebook::velox::core;
@@ -32,12 +31,14 @@ using facebook::velox::test::BatchMaker;
 
 class HybridExecOperatorTest : public OperatorTestBase {
  protected:
-  void assertFilter(
+  // current hybrid node just return input, so use SQL select *
+  void assertHybrid(
       std::vector<RowVectorPtr>&& vectors,
-      const std::string& filter = "c1 % 10  > 0") {
-    auto plan = PlanBuilder().values(vectors).filter(filter).planNode();
-
-    assertQuery(plan, "SELECT * FROM tmp WHERE " + filter);
+      const std::string& duckDBSql = "",
+      const std::string& hybridCondition = "") {
+    auto plan =
+        PlanBuilder().values(vectors).hybrid("just for test").planNode();
+    assertQuery(plan, "SELECT * FROM tmp");
   }
 
   std::shared_ptr<const RowType> rowType_{
@@ -45,18 +46,8 @@ class HybridExecOperatorTest : public OperatorTestBase {
           {BIGINT(), INTEGER(), SMALLINT(), DOUBLE()})};
 };
 
-TEST_F(HybridExecOperatorTest, filter) {
-  Operator::registerOperator(
-      [&](DriverCtx* ctx,
-          int32_t id,
-          const std::shared_ptr<const core::PlanNode>& node)
-          -> std::unique_ptr<HybridExecOperator> {
-        if (auto hybridOp =
-                std::dynamic_pointer_cast<const HybridPlanNode>(node)) {
-          return std::make_unique<HybridExecOperator>(id, ctx, hybridOp);
-        }
-        return nullptr;
-      });
+TEST_F(HybridExecOperatorTest, hybrid) {
+  Operator::registerOperator(HybridExecOperator::planNodeTranslator);
   std::vector<RowVectorPtr> vectors;
   for (int32_t i = 0; i < 10; ++i) {
     auto vector = std::dynamic_pointer_cast<RowVector>(
@@ -65,5 +56,5 @@ TEST_F(HybridExecOperatorTest, filter) {
   }
   createDuckDbTable(vectors);
 
-  assertFilter(std::move(vectors));
+  assertHybrid(std::move(vectors));
 }

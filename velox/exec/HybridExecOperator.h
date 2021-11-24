@@ -32,14 +32,16 @@ class HybridExecOperator : public Operator {
             hybridPlanNode->id(),
             "hybrid"){};
 
-  bool needsInput() const;
+  static PlanNodeTranslator planNodeTranslator;
 
-  void addInput(RowVectorPtr input);
+  bool needsInput() const override;
+
+  void addInput(RowVectorPtr input) override;
 
   BlockingReason isBlocked(ContinueFuture* future) override {
     return BlockingReason::kNotBlocked;
   };
 
-  RowVectorPtr getOutput();
+  RowVectorPtr getOutput() override;
 };
 } // namespace facebook::velox::exec

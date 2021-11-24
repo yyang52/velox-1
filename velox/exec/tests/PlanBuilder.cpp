@@ -16,6 +16,7 @@
 #include "velox/exec/tests/PlanBuilder.h"
 #include <velox/exec/Aggregate.h>
 #include <velox/exec/HashPartitionFunction.h>
+#include <velox/exec/HybridExecOperator.h>
 #include "velox/connectors/hive/HiveConnector.h"
 #include "velox/parse/Expressions.h"
 #include "velox/parse/ExpressionsParser.h"
@@ -127,6 +128,13 @@ PlanBuilder& PlanBuilder::project(
 PlanBuilder& PlanBuilder::filter(const std::string& filter) {
   planNode_ = std::make_shared<core::FilterNode>(
       nextPlanNodeId(), parseExpr(filter, planNode_->outputType()), planNode_);
+  return *this;
+}
+
+PlanBuilder& PlanBuilder::hybrid(const std::string& hybrid) {
+  // todo: how to get outputType?
+  planNode_ = std::make_shared<core::HybridPlanNode>(
+      nextPlanNodeId(), planNode_->outputType(), planNode_);
   return *this;
 }
 

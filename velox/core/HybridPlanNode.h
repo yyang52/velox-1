@@ -20,14 +20,25 @@
 namespace facebook::velox::core {
 class HybridPlanNode : public PlanNode {
  public:
-  HybridPlanNode(const PlanNodeId& id, const RowTypePtr& outputType)
-      : PlanNode(id), outputType_(outputType) {}
+  HybridPlanNode(
+      const PlanNodeId& id,
+      const RowTypePtr& outputType,
+      std::shared_ptr<const PlanNode> source)
+      : PlanNode(id), outputType_(outputType), sources_{source} {}
 
   const RowTypePtr& outputType() const override {
     return outputType_;
   }
 
+  const std::vector<std::shared_ptr<const PlanNode>>& sources() const {
+    return sources_;
+  };
+  std::string_view name() const {
+    return "hybrid";
+  }
+
  private:
+  const std::vector<std::shared_ptr<const PlanNode>> sources_;
   const RowTypePtr outputType_;
 };
 } // namespace facebook::velox::core
