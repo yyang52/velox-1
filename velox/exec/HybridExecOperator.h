@@ -15,8 +15,14 @@
  */
 #pragma once
 
-#include "velox/exec/Operator.h"
 #include "velox/core/HybridPlanNode.h"
+#include "velox/exec/Operator.h"
+
+// FIXME: include order matters since omnisci header file is not clean yet and
+// may define some dirty macro which will influence velox code base, so we put
+// it at the end of include chain. This is just a work around, if some further
+// code change have similar issue, best way is make header file cleaner.
+#include "Cider/CiderExecutionKernel.h"
 
 namespace facebook::velox::exec {
 class HybridExecOperator : public Operator {
@@ -30,7 +36,12 @@ class HybridExecOperator : public Operator {
             hybridPlanNode->outputType(),
             operatorId,
             hybridPlanNode->id(),
-            "hybrid"){};
+            "hybrid") {
+    // construct and compile a kernel here.
+    ciderKernel_ = CiderExecutionKernel::create();
+    // todo: we don't have input yet.
+    // ciderKernel_->compileWorkUnit();
+  };
 
   static PlanNodeTranslator planNodeTranslator;
 
@@ -43,5 +54,12 @@ class HybridExecOperator : public Operator {
   };
 
   RowVectorPtr getOutput() override;
+
+ private:
+  int64_t totalRowsProcessed_ = 0;
+  std::shared_ptr<CiderExecutionKernel> ciderKernel_;
+  RowVectorPtr result_;
+
+  void process();
 };
 } // namespace facebook::velox::exec

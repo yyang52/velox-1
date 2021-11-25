@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#include "velox/exec/HybridExecOperator.h"
 #include <folly/init/Init.h>
 #include "velox/core/HybridPlanNode.h"
 #include "velox/dwio/dwrf/test/utils/BatchMaker.h"
 #include "velox/exec/Driver.h"
 #include "velox/exec/tests/OperatorTestBase.h"
 #include "velox/exec/tests/PlanBuilder.h"
+#include "velox/exec/HybridExecOperator.h"
 
 using namespace facebook::velox;
 using namespace facebook::velox::core;

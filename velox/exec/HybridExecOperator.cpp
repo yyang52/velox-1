@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include "HybridExecOperator.h"
-
 #include "velox/exec/Operator.h"
+
+#include "HybridExecOperator.h"
 
 namespace facebook::velox::exec {
 
@@ -31,6 +31,7 @@ Operator::PlanNodeTranslator HybridExecOperator::planNodeTranslator =
   }
   return nullptr;
 };
+
 bool HybridExecOperator::needsInput() const {
   // TODO
   return !input_;
@@ -39,9 +40,26 @@ bool HybridExecOperator::needsInput() const {
 void HybridExecOperator::addInput(RowVectorPtr input) {
   // TODO
   input_ = std::move(input);
+  process();
 }
 
 RowVectorPtr HybridExecOperator::getOutput() {
-  return std::move(input_);
+  return std::move(result_);
+}
+
+void HybridExecOperator::process() {
+  // 1. convert data
+  // Convertor.V2O
+
+  // 2. call ciderKernel_ run
+  // ciderKernel_->runWithData();
+
+  // 3. convert data
+  // result_ = Convertor.O2V()
+
+  // for now, we just steal input_
+  totalRowsProcessed_ += input_->size();
+  result_ = std::move(input_);
+
 }
 } // namespace facebook::velox::exec
