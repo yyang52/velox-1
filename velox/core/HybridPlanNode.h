@@ -17,14 +17,20 @@
 
 #include "velox/core/PlanNode.h"
 
+#include "QueryEngine/RelAlgExecutionUnit.h"
+
 namespace facebook::velox::core {
 class HybridPlanNode : public PlanNode {
  public:
   HybridPlanNode(
       const PlanNodeId& id,
       const RowTypePtr& outputType,
+      const std::shared_ptr<RelAlgExecutionUnit> relAlgExecUnit,
       std::shared_ptr<const PlanNode> source)
-      : PlanNode(id), outputType_(outputType), sources_{source} {}
+      : PlanNode(id),
+        outputType_(outputType),
+        relAlgExecUnit_(relAlgExecUnit),
+        sources_{source} {}
 
   const RowTypePtr& outputType() const override {
     return outputType_;
@@ -33,6 +39,7 @@ class HybridPlanNode : public PlanNode {
   const std::vector<std::shared_ptr<const PlanNode>>& sources() const {
     return sources_;
   };
+
   std::string_view name() const {
     return "hybrid";
   }
@@ -40,5 +47,6 @@ class HybridPlanNode : public PlanNode {
  private:
   const std::vector<std::shared_ptr<const PlanNode>> sources_;
   const RowTypePtr outputType_;
+  const std::shared_ptr<RelAlgExecutionUnit> relAlgExecUnit_;
 };
 } // namespace facebook::velox::core

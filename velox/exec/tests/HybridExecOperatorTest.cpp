@@ -15,12 +15,14 @@
  */
 
 #include <folly/init/Init.h>
-#include "velox/core/HybridPlanNode.h"
 #include "velox/dwio/dwrf/test/utils/BatchMaker.h"
 #include "velox/exec/Driver.h"
 #include "velox/exec/tests/OperatorTestBase.h"
 #include "velox/exec/tests/PlanBuilder.h"
 #include "velox/exec/HybridExecOperator.h"
+
+// FIXME: Workaround dependency issue from omnisci and velox integrations
+#include "velox/core/HybridPlanNode.h"
 
 using namespace facebook::velox;
 using namespace facebook::velox::core;

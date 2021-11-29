@@ -32,7 +32,7 @@ class CiderTest : public OperatorTestBase {
           {INTEGER(), DOUBLE(), INTEGER(), INTEGER()})};
 };
 
-// Tests fusing of consecutive filters and projects.
+// Test for consecutive filter and project fusion.
 TEST_F(CiderTest, filterProjectFused) {
   std::vector<RowVectorPtr> vectors;
   for (int32_t i = 0; i < 10; ++i) {

@@ -19,8 +19,6 @@
 #include "QueryEngine/QueryHint.h"
 #include "QueryEngine/RelAlgTranslator.h"
 
-using namespace facebook::velox;
-
 namespace facebook::velox::cider {
 
 namespace {
@@ -63,6 +61,102 @@ std::unordered_map<std::string, int> get_col_info_from_source(
   return col_info;
 }
 } // namespace
+
+std::shared_ptr<velox::core::PlanNode>
+CiderExecutionUnitGenerator::transformPlan(
+    const std::shared_ptr<velox::core::PlanNode> planNode) {
+  // For output node, keep it as it is and update its source
+  if (const auto paritionedOutputNode =
+          std::dynamic_pointer_cast<const PartitionedOutputNode>(planNode)) {
+    // Deep Copy Output node
+    return std::make_shared<PartitionedOutputNode>(
+        paritionedOutputNode->id(),
+        paritionedOutputNode->keys(),
+        paritionedOutputNode->numPartitions(),
+        paritionedOutputNode->isBroadcast(),
+        paritionedOutputNode->isReplicateNullsAndAny(),
+        paritionedOutputNode->partitionFunctionFactory(),
+        paritionedOutputNode->outputType(),
+        transformPlanInternal(
+            nullptr, paritionedOutputNode->sources()[0], nullptr));
+  }
+  throw std::runtime_error("Unsupported output node");
+}
+
+std::shared_ptr<const velox::core::PlanNode>
+CiderExecutionUnitGenerator::transformPlanInternal(
+    std::shared_ptr<CiderParamContext> ctx,
+    const std::shared_ptr<const PlanNode> current,
+    std::shared_ptr<RelAlgExecutionUnit> execUnit) {
+  // TODO (Cheng): need to support join nodes???
+
+  // For source nodes, keep it as it is but still needs its meta info for
+  // previous generated metadata. And one new hybrid plan node is built with
+  // this updated exec unit info.
+  bool isSourceNode = false;
+  if (const auto tableScan =
+          std::dynamic_pointer_cast<const velox::core::TableScanNode>(
+              current)) {
+    isSourceNode = true;
+    if (execUnit) {
+      createOrUpdateExecutionUnit(tableScan, execUnit);
+    }
+  }
+  if (const auto valuesNode =
+          std::dynamic_pointer_cast<const velox::core::ValuesNode>(current)) {
+    isSourceNode = true;
+    if (execUnit) {
+      createOrUpdateExecutionUnit(valuesNode, execUnit);
+    }
+  }
+
+  if (isSourceNode) {
+    if (execUnit) {
+      // FIXME: How to update plan ID info?
+      // Still requiring table scan info to generate enough for
+      // RelAlgExecutionUnit
+      return std::dynamic_pointer_cast<const facebook::velox::core::PlanNode>(
+          std::make_shared<velox::core::HybridPlanNode>(
+              ctx->id_, ctx->rowType_, execUnit, current));
+    }
+    return current;
+  }
+
+  // For supported nodes, create or update its meta info
+  if (const auto filter =
+          std::dynamic_pointer_cast<const velox::core::FilterNode>(current)) {
+    if(ctx){
+      ctx = std::make_shared<CiderParamContext>(
+          current->outputType(), current->id());
+    }
+    createOrUpdateExecutionUnit(filter, execUnit);
+    return transformPlanInternal(ctx, current->sources()[0], execUnit);
+  }
+  if (const auto project =
+          std::dynamic_pointer_cast<const velox::core::ProjectNode>(current)) {
+    if(ctx){
+      ctx = std::make_shared<CiderParamContext>(
+          current->outputType(), current->id());
+    }
+    createOrUpdateExecutionUnit(project, execUnit);
+    return transformPlanInternal(ctx, current->sources()[0], execUnit);
+  }
+  if (const auto aggregation =
+          std::dynamic_pointer_cast<const velox::core::AggregationNode>(
+              current)) {
+    if(ctx){
+      ctx = std::make_shared<CiderParamContext>(
+          current->outputType(), current->id());
+    }
+    createOrUpdateExecutionUnit(aggregation, execUnit);
+    return transformPlanInternal(ctx, current->sources()[0], execUnit);
+  }
+
+  // Fallback part: if non-source, non-supported ops, just return. if execUnit
+  // exists, build up a execUnit for now.
+  // TODO: just throw an exception here for now
+  throw std::runtime_error("Unsupported Plan Node");
+}
 
 std::shared_ptr<RelAlgExecutionUnit>
 CiderExecutionUnitGenerator::createExecutionUnit(

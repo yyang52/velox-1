@@ -27,6 +27,7 @@ Operator::PlanNodeTranslator HybridExecOperator::planNodeTranslator =
     -> std::unique_ptr<HybridExecOperator> {
   if (auto hybridOp = std::dynamic_pointer_cast<
           const facebook::velox::core::HybridPlanNode>(node)) {
+    // TODO: translate from RelAlgExecutionUnit into kernel
     return std::make_unique<HybridExecOperator>(id, ctx, hybridOp);
   }
   return nullptr;
