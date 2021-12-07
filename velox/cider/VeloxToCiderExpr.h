@@ -32,7 +32,7 @@ class VeloxToCiderExprConverter {
   std::vector<std::shared_ptr<const Analyzer::Expr>> toVeloxExpr(
       std::vector<std::shared_ptr<const ITypedExpr>> v_expr) const;
 
-  std::shared_ptr<Analyzer::Expr> wrap_expr_with_cast(
+  std::shared_ptr<Analyzer::Expr> wrapExprWithCast(
       const std::shared_ptr<Analyzer::Expr> c_expr,
       std::shared_ptr<const Type> type) const;
 

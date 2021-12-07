@@ -82,13 +82,13 @@ SQLAgg getCiderAggOp(const std::string op) {
 // referring velox/docs/functions/aggregate.rst
 SQLTypeInfo getVeloxAggType(
     std::string op,
-    std::shared_ptr<const ITypedExpr> v_expr) {
+    std::shared_ptr<const ITypedExpr> vExpr) {
   if (op == "sum") {
-    return getCiderType(v_expr->type(), false);
+    return getCiderType(vExpr->type(), false);
   } else if (op == "min") {
-    return getCiderType(v_expr->type(), false);
+    return getCiderType(vExpr->type(), false);
   } else if (op == "max") {
-    return getCiderType(v_expr->type(), false);
+    return getCiderType(vExpr->type(), false);
   } else if (op == "avg") {
     return SQLTypeInfo(SQLTypes::kDOUBLE, false);
   } else if (op == "count") {
@@ -127,7 +127,7 @@ SQLTypeInfo getCiderAggType(
 } // namespace
 
 // wrap target expr from project node with CAST info
-std::shared_ptr<Analyzer::Expr> VeloxToCiderExprConverter::wrap_expr_with_cast(
+std::shared_ptr<Analyzer::Expr> VeloxToCiderExprConverter::wrapExprWithCast(
     const std::shared_ptr<Analyzer::Expr> c_expr,
     std::shared_ptr<const Type> type) const {
   // TODO: isNuallable may not be false here
@@ -135,31 +135,36 @@ std::shared_ptr<Analyzer::Expr> VeloxToCiderExprConverter::wrap_expr_with_cast(
 }
 
 std::shared_ptr<Analyzer::Expr> VeloxToCiderExprConverter::toCiderExpr(
-    std::shared_ptr<const ITypedExpr> v_expr,
-    std::unordered_map<std::string, int> col_info) const {
-  if (auto constant =
-          std::dynamic_pointer_cast<const ConstantTypedExpr>(v_expr)) {
-    return toCiderExpr(constant);
+    std::shared_ptr<const ITypedExpr> vExpr,
+    std::unordered_map<std::string, int> colInfo) const {
+  try {
+    if (auto constant =
+            std::dynamic_pointer_cast<const ConstantTypedExpr>(vExpr)) {
+      return toCiderExpr(constant);
+    }
+    if (auto field_expr =
+            std::dynamic_pointer_cast<const FieldAccessTypedExpr>(vExpr)) {
+      return toCiderExpr(field_expr, colInfo);
+    }
+    if (auto call_expr = std::dynamic_pointer_cast<const CallTypedExpr>(vExpr)) {
+      return toCiderExpr(call_expr, colInfo);
+    }
+    if (auto cast_expr = std::dynamic_pointer_cast<const CastTypedExpr>(vExpr)) {
+      return toCiderExpr(cast_expr, colInfo);
+    }
+    return nullptr;
+  } catch (std::runtime_error& error) {
+    std::cout << error.what();
+    return nullptr;
   }
-  if (auto field_expr =
-          std::dynamic_pointer_cast<const FieldAccessTypedExpr>(v_expr)) {
-    return toCiderExpr(field_expr, col_info);
-  }
-  if (auto call_expr = std::dynamic_pointer_cast<const CallTypedExpr>(v_expr)) {
-    return toCiderExpr(call_expr, col_info);
-  }
-  if (auto cast_expr = std::dynamic_pointer_cast<const CastTypedExpr>(v_expr)) {
-    return toCiderExpr(cast_expr, col_info);
-  }
-  return nullptr;
 }
 
 std::shared_ptr<Analyzer::Expr> VeloxToCiderExprConverter::toCiderExpr(
-    std::shared_ptr<const ConstantTypedExpr> v_expr) const {
+    std::shared_ptr<const ConstantTypedExpr> vExpr) const {
   // TOTO: update this based on RelAlgTranslator::translateLiteral
-  auto type_kind = v_expr->type()->kind();
-  auto cider_type = getCiderType(v_expr->type(), false);
-  auto value = v_expr->value();
+  auto type_kind = vExpr->type()->kind();
+  auto cider_type = getCiderType(vExpr->type(), false);
+  auto value = vExpr->value();
   // referring sqltypes.h/Datum
   Datum constant_value;
   switch (type_kind) {
@@ -181,65 +186,65 @@ std::shared_ptr<Analyzer::Expr> VeloxToCiderExprConverter::toCiderExpr(
           cider_type, false, constant_value);
     default:
       throw std::runtime_error(
-          v_expr->type()->toString() + " is not yet supported.");
+        vExpr->type()->toString() + " is not yet supported.");
   }
 }
 
 std::shared_ptr<Analyzer::Expr> VeloxToCiderExprConverter::toCiderExpr(
-    std::shared_ptr<const FieldAccessTypedExpr> v_expr,
-    std::unordered_map<std::string, int> col_info) const {
+    std::shared_ptr<const FieldAccessTypedExpr> vExpr,
+    std::unordered_map<std::string, int> colInfo) const {
   // inputs for FieldAccessTypedExpr is not useful for omnisci?
   // TODO: no table id info from ConnectorTableHandle, so use 0 for now
-  auto it = col_info.find(v_expr->name());
-  if (it == col_info.end()) {
+  auto it = colInfo.find(vExpr->name());
+  if (it == colInfo.end()) {
     throw std::runtime_error(
-        "can't get column index for column " + v_expr->name());
+        "can't get column index for column " + vExpr->name());
   }
-  auto col_index = it->second;
+  auto colIndex = it->second;
   // TODO: how to determine isNullable? use true for now
-  auto col_type = getCiderType(v_expr->type(), true);
-  return std::make_shared<Analyzer::ColumnVar>(col_type, 0, col_index, 0);
+  auto colType = getCiderType(vExpr->type(), true);
+  return std::make_shared<Analyzer::ColumnVar>(colType, 0, colIndex, 0);
 }
 
 std::shared_ptr<Analyzer::Expr> VeloxToCiderExprConverter::toCiderExpr(
-    std::shared_ptr<const CastTypedExpr> v_expr,
-    std::unordered_map<std::string, int> col_info) const {
+    std::shared_ptr<const CastTypedExpr> vExpr,
+    std::unordered_map<std::string, int> colInfo) const {
   // currently only support one expr cast, see Analyzer::UOper
-  auto inputs = v_expr->inputs();
+  auto inputs = vExpr->inputs();
   CHECK_EQ(inputs.size(), 1);
   return std::make_shared<Analyzer::UOper>(
-    getCiderType(v_expr->type(), false),
+    getCiderType(vExpr->type(), false),
     false,
     SQLOps::kCAST,
-    toCiderExpr(inputs[0], col_info));
+    toCiderExpr(inputs[0], colInfo));
 }
 
 std::shared_ptr<Analyzer::Expr> VeloxToCiderExprConverter::toCiderExpr(
-    std::shared_ptr<const CallTypedExpr> v_expr,
-    std::unordered_map<std::string, int> col_info) const {
-  if (v_expr->name() == "gt" || v_expr->name() == "lt" ||
-      v_expr->name() == "gte" || v_expr->name() == "lte" ||
-      v_expr->name() == "eq" || v_expr->name() == "and" ||
-      v_expr->name() == "multiply") {
-    auto type = getCiderType(v_expr->type(), false);
-    auto inputs = v_expr->inputs();
+    std::shared_ptr<const CallTypedExpr> vExpr,
+    std::unordered_map<std::string, int> colInfo) const {
+  if (vExpr->name() == "gt" || vExpr->name() == "lt" ||
+      vExpr->name() == "gte" || vExpr->name() == "lte" ||
+      vExpr->name() == "eq" || vExpr->name() == "and" ||
+      vExpr->name() == "multiply") {
+    auto type = getCiderType(vExpr->type(), false);
+    auto inputs = vExpr->inputs();
     CHECK_EQ(inputs.size(), 2);
     SQLQualifier qualifier = SQLQualifier::kONE;
     return std::make_shared<Analyzer::BinOper>(
         type,
         false,
-        getCiderSqlOps(v_expr->name()),
+        getCiderSqlOps(vExpr->name()),
         qualifier,
-        toCiderExpr(inputs[0], col_info),
-        toCiderExpr(inputs[1], col_info));
+        toCiderExpr(inputs[0], colInfo),
+        toCiderExpr(inputs[1], colInfo));
   }
   // between needs change from between(ROW["c1"],0.6,1.6)
   // to AND(GE(ROW['c1'], 0.6), LE(ROW['c1'], 1.6))
   // TODO: what about timestamp type?
-  if (v_expr->name() == "between") {
-    auto type = getCiderType(v_expr->type(), false);
+  if (vExpr->name() == "between") {
+    auto type = getCiderType(vExpr->type(), false);
     // should have 3 inputs
-    auto inputs = v_expr->inputs();
+    auto inputs = vExpr->inputs();
     CHECK_EQ(inputs.size(), 3);
     SQLQualifier qualifier = SQLQualifier::kONE;
     return std::make_shared<Analyzer::BinOper>(
@@ -252,35 +257,35 @@ std::shared_ptr<Analyzer::Expr> VeloxToCiderExprConverter::toCiderExpr(
             false,
             SQLOps::kGE,
             qualifier,
-            toCiderExpr(inputs[0], col_info),
-            toCiderExpr(inputs[1], col_info)),
+            toCiderExpr(inputs[0], colInfo),
+            toCiderExpr(inputs[1], colInfo)),
         std::make_shared<Analyzer::BinOper>(
             type,
             false,
             SQLOps::kLE,
             qualifier,
-            toCiderExpr(inputs[0], col_info),
-            toCiderExpr(inputs[2], col_info)));
+            toCiderExpr(inputs[0], colInfo),
+            toCiderExpr(inputs[2], colInfo)));
   }
   // agg cases, refer RelAlgTranslator::translateAggregateRex
-  if (v_expr->name() == "sum" || v_expr->name() == "avg") {
+  if (vExpr->name() == "sum" || vExpr->name() == "avg") {
     // get target_expr which bypass the project mask
     // TODO: we only support one arg agg here
-    CHECK_EQ(v_expr->inputs().size(), 1);
+    CHECK_EQ(vExpr->inputs().size(), 1);
     // we returned a agg_expr with Analyzer::ColumnVar as its expr and then
     // replace this mask with actual detailed expr in agg node
     if (auto agg_field = std::dynamic_pointer_cast<const FieldAccessTypedExpr>(
-            v_expr->inputs()[0])) {
-      SQLAgg agg_kind = getCiderAggOp(v_expr->name());
+            vExpr->inputs()[0])) {
+      SQLAgg agg_kind = getCiderAggOp(vExpr->name());
       auto mask = agg_field->name();
-      auto arg_expr = toCiderExpr(v_expr->inputs()[0], col_info);
+      auto arg_expr = toCiderExpr(vExpr->inputs()[0], colInfo);
       std::shared_ptr<Analyzer::Constant> arg1; // 2nd aggregate parameter
       SQLTypeInfo agg_type = getCiderAggType(agg_kind, arg_expr.get());
       // we need to compare agg outputType between cider and velox to assure
       // result's corectness
       CHECK_EQ(
           agg_type.get_type(),
-          getVeloxAggType(v_expr->name(), agg_field).get_type());
+          getVeloxAggType(vExpr->name(), agg_field).get_type());
       return std::make_shared<Analyzer::AggExpr>(
           agg_type, agg_kind, arg_expr, false, arg1);
     } else {

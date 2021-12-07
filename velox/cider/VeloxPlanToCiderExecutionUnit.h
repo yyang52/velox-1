@@ -39,7 +39,7 @@ struct CiderParamContext {
 class CiderExecutionUnitGenerator {
  public:
   explicit CiderExecutionUnitGenerator()
-      : ciderExprConverter_(), exprMaskMap_{} {}
+      : ciderExprConverter_(), exprMap_{}, translatable_{true} {}
 
   /**
    *   Keep original output node and source node from Velox
@@ -50,38 +50,30 @@ class CiderExecutionUnitGenerator {
   std::shared_ptr<velox::core::PlanNode> transformPlan(
       const std::shared_ptr<velox::core::PlanNode> planNode);
 
-  std::shared_ptr<RelAlgExecutionUnit> createExecutionUnit(
-      const std::shared_ptr<const velox::core::PlanNode>& node);
-
  private:
   std::shared_ptr<const velox::core::PlanNode> transformPlanInternal(
       std::shared_ptr<CiderParamContext> ctx,
       const std::shared_ptr<const velox::core::PlanNode> current,
-      std::shared_ptr<RelAlgExecutionUnit> execUnit);
+      std::shared_ptr<RelAlgExecutionUnit>& execUnit);
 
-  void createOrUpdateExecutionUnit(
-      const std::shared_ptr<const velox::core::TableScanNode>& node,
-      std::shared_ptr<RelAlgExecutionUnit>& exe_unit);
-
-  void createOrUpdateExecutionUnit(
-      const std::shared_ptr<const velox::core::ValuesNode>& node,
-      std::shared_ptr<RelAlgExecutionUnit>& exe_unit);
-
-  void createOrUpdateExecutionUnit(
+  void updateExecutionUnit(
       const std::shared_ptr<const velox::core::FilterNode>& node,
-      std::shared_ptr<RelAlgExecutionUnit>& exe_unit);
+      std::shared_ptr<RelAlgExecutionUnit>& exeUnit);
 
-  void createOrUpdateExecutionUnit(
+  void updateExecutionUnit(
       const std::shared_ptr<const velox::core::ProjectNode>& node,
-      std::shared_ptr<RelAlgExecutionUnit>& exe_unit);
+      std::shared_ptr<RelAlgExecutionUnit>& exeUnit);
 
-  void createOrUpdateExecutionUnit(
+  void updateExecutionUnit(
       const std::shared_ptr<const velox::core::AggregationNode>& node,
-      std::shared_ptr<RelAlgExecutionUnit>& exe_unit);
+      std::shared_ptr<RelAlgExecutionUnit>& exeUnit);
+
+  void updateExprMap(const std::string exprKey, std::shared_ptr<Analyzer::Expr>& expr, int index);
 
   VeloxToCiderExprConverter ciderExprConverter_;
   std::vector<std::pair<std::string, std::shared_ptr<Analyzer::Expr>>>
-      exprMaskMap_;
+      exprMap_;
+  bool translatable_;
 };
 
 } // namespace facebook::velox::cider

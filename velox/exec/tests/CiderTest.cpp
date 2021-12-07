@@ -52,13 +52,19 @@ TEST_F(CiderTest, filterProjectFused) {
           .aggregation(
                     {},
                     {"sum(e1)"},
-                    {"revenue"},
+                    {},
                     core::AggregationNode::Step::kPartial,
                     false)
+          .partitionedOutput({}, 1)
           .planNode();
   auto content = plan->toString(true, true);
   std::cout << content;
-  CiderExecutionUnitGenerator generator;
-  // for test
-  auto exe_unit = generator.createExecutionUnit(plan);
+  try {
+    CiderExecutionUnitGenerator generator;
+    // for test
+    auto cider_plan = generator.transformPlan(plan);
+  } catch (std::runtime_error& error) {
+    std::string message = error.what();
+    std::cout << error.what();
+  }
 }

@@ -22,55 +22,88 @@
 namespace facebook::velox::cider {
 
 namespace {
-// for data source node only
-std::vector<Analyzer::Expr*> getTargetExprsForCurNode(
-    const RowTypePtr& row_type,
-    VeloxToCiderExprConverter& ciderExprConverter) {
-  auto output_names = row_type->names();
-  auto output_types = row_type->children();
-  CHECK_GE(output_names.size(), 1);
-  std::vector<Analyzer::Expr*> target_exprs;
-  std::unordered_map<std::string, int> col_info;
-  for (int i = 0; i < output_names.size(); i++) {
-    col_info.emplace(output_names[i], i);
-  }
-  for (int i = 0; i < output_names.size(); i++) {
-    auto col_expr = std::make_shared<FieldAccessTypedExpr>(
-        output_types[i], output_names[i]);
 
-    Analyzer::Expr* target_expr =
-        ciderExprConverter
-            .toCiderExpr(
-                std::dynamic_pointer_cast<ITypedExpr>(col_expr), col_info)
-            .get();
-    target_exprs.emplace_back((Analyzer::Expr*)&target_expr);
-  }
-  return target_exprs;
-}
-
-std::unordered_map<std::string, int> get_col_info_from_source(
+std::list<std::shared_ptr<const InputColDescriptor>> getInputColDescs(
     const std::shared_ptr<const velox::core::PlanNode>& node) {
-  auto row_type = node->outputType();
-  auto col_names = row_type->names();
-
-  std::unordered_map<std::string, int> col_info;
-  // auto col_types = row_type ->children();
-  for (int i = 0; i < col_names.size(); i++) {
-    col_info.emplace(col_names[i], i);
+  std::list<std::shared_ptr<const InputColDescriptor>> inputColDescs;
+  // we can get column info(name, columnIndex, type) from parent node
+  // outputvariables but here for omnisci, the index is default using
+  // 0, 1...output_variables.size()-1 column type will be tracked in exprs
+  // TODO: need handle complex outputType, like struct
+  auto rowType = node->outputType();
+  for (int i = 0; i < rowType->size(); i++) {
+    // TODO: we use table_id 0 and nest_level 0 for input
+    // table, which may need further evaluation
+    inputColDescs.emplace_back(
+        std::make_shared<const InputColDescriptor>(i, 0, 0));
   }
-  return col_info;
+  return inputColDescs;
 }
+
+std::unordered_map<std::string, int> getColInfoFromSource(
+    const std::shared_ptr<const velox::core::PlanNode>& node) {
+  auto colNames = node->outputType()->names();
+
+  std::unordered_map<std::string, int> colInfo;
+  // auto col_types = rowType ->children();
+  for (int i = 0; i < colNames.size(); i++) {
+    colInfo.emplace(colNames[i], i);
+  }
+  return colInfo;
+}
+
+bool isSourceNode(const std::shared_ptr<const velox::core::PlanNode>& node) {
+  if (std::dynamic_pointer_cast<const velox::core::TableScanNode>(node) ||
+      std::dynamic_pointer_cast<const velox::core::ValuesNode>(node)) {
+    return true;
+  }
+  return false;
+}
+
 } // namespace
 
 std::shared_ptr<velox::core::PlanNode>
 CiderExecutionUnitGenerator::transformPlan(
     const std::shared_ptr<velox::core::PlanNode> planNode) {
+  // construct an empty execution unit for later update
+  // TODO: need reconsideration for join
+  std::vector<InputDescriptor> inputDescs;
+  inputDescs.emplace_back(0, 0);
+  std::list<std::shared_ptr<const InputColDescriptor>> inputColDescs;
+  auto qualsCf = QualsConjunctiveForm{};
+  std::shared_ptr<Analyzer::Expr> empty;
+  std::list<std::shared_ptr<Analyzer::Expr>> groupbyExprs;
+  groupbyExprs.emplace_back(empty);
+  JoinQualsPerNestingLevel leftDeepJoinQuals;
+  std::vector<Analyzer::Expr*> targetExprs;
+  auto execUnit = std::make_shared<RelAlgExecutionUnit>(RelAlgExecutionUnit{
+      inputDescs,
+      inputColDescs,
+      qualsCf.simple_quals,
+      qualsCf.quals,
+      leftDeepJoinQuals,
+      groupbyExprs,
+      targetExprs,
+      nullptr,
+      {{}, SortAlgorithm::Default, 0, 0},
+      0,
+      RegisteredQueryHint::defaults(),
+      EMPTY_QUERY_PLAN,
+      {},
+      {},
+      false,
+      std::nullopt,
+      nullptr});
   // For output node, keep it as it is and update its source
   if (const auto paritionedOutputNode =
           std::dynamic_pointer_cast<const PartitionedOutputNode>(planNode)) {
-    // Deep Copy Output node
+    // Hybrid cider node should have same output as outputNode's source, with
+    // planId "0"
+    auto ciderParamContext = std::make_shared<CiderParamContext>(
+        paritionedOutputNode->sources()[0]->outputType(), "0");
+    // Deep Copy Output node with planId "1"
     return std::make_shared<PartitionedOutputNode>(
-        paritionedOutputNode->id(),
+        "1",
         paritionedOutputNode->keys(),
         paritionedOutputNode->numPartitions(),
         paritionedOutputNode->isBroadcast(),
@@ -78,7 +111,7 @@ CiderExecutionUnitGenerator::transformPlan(
         paritionedOutputNode->partitionFunctionFactory(),
         paritionedOutputNode->outputType(),
         transformPlanInternal(
-            nullptr, paritionedOutputNode->sources()[0], nullptr));
+            ciderParamContext, paritionedOutputNode->sources()[0], execUnit));
   }
   throw std::runtime_error("Unsupported output node");
 }
@@ -87,31 +120,14 @@ std::shared_ptr<const velox::core::PlanNode>
 CiderExecutionUnitGenerator::transformPlanInternal(
     std::shared_ptr<CiderParamContext> ctx,
     const std::shared_ptr<const PlanNode> current,
-    std::shared_ptr<RelAlgExecutionUnit> execUnit) {
+    std::shared_ptr<RelAlgExecutionUnit>& execUnit) {
   // TODO (Cheng): need to support join nodes???
 
   // For source nodes, keep it as it is but still needs its meta info for
   // previous generated metadata. And one new hybrid plan node is built with
   // this updated exec unit info.
-  bool isSourceNode = false;
-  if (const auto tableScan =
-          std::dynamic_pointer_cast<const velox::core::TableScanNode>(
-              current)) {
-    isSourceNode = true;
-    if (execUnit) {
-      createOrUpdateExecutionUnit(tableScan, execUnit);
-    }
-  }
-  if (const auto valuesNode =
-          std::dynamic_pointer_cast<const velox::core::ValuesNode>(current)) {
-    isSourceNode = true;
-    if (execUnit) {
-      createOrUpdateExecutionUnit(valuesNode, execUnit);
-    }
-  }
-
-  if (isSourceNode) {
-    if (execUnit) {
+  if (isSourceNode(current)) {
+    if (execUnit->target_exprs.size() != 0) {
       // FIXME: How to update plan ID info?
       // Still requiring table scan info to generate enough for
       // RelAlgExecutionUnit
@@ -125,30 +141,27 @@ CiderExecutionUnitGenerator::transformPlanInternal(
   // For supported nodes, create or update its meta info
   if (const auto filter =
           std::dynamic_pointer_cast<const velox::core::FilterNode>(current)) {
-    if(ctx){
-      ctx = std::make_shared<CiderParamContext>(
-          current->outputType(), current->id());
+    updateExecutionUnit(filter, execUnit);
+    if (!translatable_) {
+      throw std::runtime_error("Failed to translate filter condition.");
     }
-    createOrUpdateExecutionUnit(filter, execUnit);
     return transformPlanInternal(ctx, current->sources()[0], execUnit);
   }
   if (const auto project =
           std::dynamic_pointer_cast<const velox::core::ProjectNode>(current)) {
-    if(ctx){
-      ctx = std::make_shared<CiderParamContext>(
-          current->outputType(), current->id());
+    updateExecutionUnit(project, execUnit);
+    if (!translatable_) {
+      throw std::runtime_error("failed to translate projects.");
     }
-    createOrUpdateExecutionUnit(project, execUnit);
     return transformPlanInternal(ctx, current->sources()[0], execUnit);
   }
   if (const auto aggregation =
           std::dynamic_pointer_cast<const velox::core::AggregationNode>(
               current)) {
-    if(ctx){
-      ctx = std::make_shared<CiderParamContext>(
-          current->outputType(), current->id());
+    updateExecutionUnit(aggregation, execUnit);
+    if (!translatable_) {
+      throw std::runtime_error("failed to translate aggregates.");
     }
-    createOrUpdateExecutionUnit(aggregation, execUnit);
     return transformPlanInternal(ctx, current->sources()[0], execUnit);
   }
 
@@ -158,261 +171,151 @@ CiderExecutionUnitGenerator::transformPlanInternal(
   throw std::runtime_error("Unsupported Plan Node");
 }
 
-std::shared_ptr<RelAlgExecutionUnit>
-CiderExecutionUnitGenerator::createExecutionUnit(
-    const std::shared_ptr<const velox::core::PlanNode>& node) {
-  std::shared_ptr<RelAlgExecutionUnit> exe_unit;
-  // put plan nodes into a vector and analyze each of them
-  std::vector<std::shared_ptr<const velox::core::PlanNode>> nodes;
-  std::shared_ptr<const velox::core::PlanNode> temp = node;
-  // not considering multi-source such as join
-  while (node->sources().size() != 0 && temp->sources().size() != 0) {
-    nodes.emplace_back(temp);
-    const auto sources = temp->sources();
-    // TODO: join case?
-    //CHECK_EQ(sources.size(), 1);
-    temp = sources[0];
-  }
-  nodes.emplace_back(temp);
-  for (int i = nodes.size() - 1; i >= 0; i--) {
-    if (const auto table_scan =
-            std::dynamic_pointer_cast<const velox::core::TableScanNode>(
-                nodes[i])) {
-      createOrUpdateExecutionUnit(table_scan, exe_unit);
-    }
-    if (const auto values_node =
-            std::dynamic_pointer_cast<const velox::core::ValuesNode>(
-                nodes[i])) {
-      createOrUpdateExecutionUnit(values_node, exe_unit);
-    }
-    if (const auto filter =
-            std::dynamic_pointer_cast<const velox::core::FilterNode>(
-                nodes[i])) {
-      createOrUpdateExecutionUnit(filter, exe_unit);
-    }
-    if (const auto project =
-            std::dynamic_pointer_cast<const velox::core::ProjectNode>(
-                nodes[i])) {
-      createOrUpdateExecutionUnit(project, exe_unit);
-    }
-    if (const auto aggregation =
-            std::dynamic_pointer_cast<const velox::core::AggregationNode>(
-                nodes[i])) {
-      createOrUpdateExecutionUnit(aggregation, exe_unit);
-    }
-  }
-  return exe_unit;
-}
-
-void CiderExecutionUnitGenerator::createOrUpdateExecutionUnit(
-    const std::shared_ptr<const velox::core::TableScanNode>& node,
-    std::shared_ptr<RelAlgExecutionUnit>& exe_unit) {
-  // get input_descs and input_column_descs from velox TableScanNode
-  std::vector<InputDescriptor> input_descs;
-  // give a dummy table_id and nest_level
-  input_descs.emplace_back(0, 0);
-  std::list<std::shared_ptr<const InputColDescriptor>> input_col_descs;
-  // we can get column info(name, columnIndex, type) from tableScan
-  // outputvariables but here for omnisci, the index is default using
-  // 0, 1...output_variables.size()-1 column type will be tracked in exprs
-  auto rowType = node->outputType();
-  for (int i = 0; i < rowType->size(); i++) {
-    input_col_descs.emplace_back(
-        std::make_shared<const InputColDescriptor>(i, 0, 0));
-  }
-  // TableScanNode should firstly create exec_unit in velox PlanFragment
-  VELOX_CHECK_NULL(exe_unit);
-  auto quals_cf = QualsConjunctiveForm{};
-  std::shared_ptr<Analyzer::Expr> empty;
-  std::list<std::shared_ptr<Analyzer::Expr>> groupby_exprs;
-  groupby_exprs.emplace_back(empty);
-  // generate target_exprs which may update in later nodes
-  auto target_exprs =
-      getTargetExprsForCurNode(node->outputType(), ciderExprConverter_);
-  JoinQualsPerNestingLevel left_deep_join_quals;
-  // use nullptr for query_state_;
-  exe_unit = std::make_shared<RelAlgExecutionUnit>(RelAlgExecutionUnit{
-      input_descs,
-      input_col_descs,
-      quals_cf.simple_quals,
-      quals_cf.quals,
-      left_deep_join_quals,
-      groupby_exprs,
-      target_exprs,
-      nullptr,
-      {{}, SortAlgorithm::Default, 0, 0},
-      0,
-      RegisteredQueryHint::defaults(),
-      EMPTY_QUERY_PLAN,
-      {},
-      {},
-      false,
-      std::nullopt,
-      nullptr});
-}
-
-void CiderExecutionUnitGenerator::createOrUpdateExecutionUnit(
-    const std::shared_ptr<const velox::core::ValuesNode>& node,
-    std::shared_ptr<RelAlgExecutionUnit>& exe_unit) {
-  // get input_descs and input_column_descs from velox ValuesNode
-  std::vector<InputDescriptor> input_descs;
-  // give a dummy table_id and nest_level
-  input_descs.emplace_back(0, 0);
-  std::list<std::shared_ptr<const InputColDescriptor>> input_col_descs;
-  // we can get column info(name, columnIndex, type) from tableScan
-  // outputvariables but here for omnisci, the index is default using
-  // 0, 1...output_variables.size()-1 column type will be tracked in exprs
-  auto rowType = node->outputType();
-  for (int i = 0; i < rowType->size(); i++) {
-    input_col_descs.emplace_back(
-        std::make_shared<const InputColDescriptor>(i, 0, 0));
-  }
-  // ValuesNode should firstly create exec_unit in velox PlanFragment
-  VELOX_CHECK_NULL(exe_unit);
-  auto quals_cf = QualsConjunctiveForm{};
-  std::shared_ptr<Analyzer::Expr> empty;
-  std::list<std::shared_ptr<Analyzer::Expr>> groupby_exprs;
-  groupby_exprs.emplace_back(empty);
-  // generate target_exprs which may update in later nodes
-  auto target_exprs =
-      getTargetExprsForCurNode(node->outputType(), ciderExprConverter_);
-  JoinQualsPerNestingLevel left_deep_join_quals;
-  // use nullptr for query_state_;
-  exe_unit = std::make_shared<RelAlgExecutionUnit>(RelAlgExecutionUnit{
-      input_descs,
-      input_col_descs,
-      quals_cf.simple_quals,
-      quals_cf.quals,
-      left_deep_join_quals,
-      groupby_exprs,
-      target_exprs,
-      nullptr,
-      {{}, SortAlgorithm::Default, 0, 0},
-      0,
-      RegisteredQueryHint::defaults(),
-      EMPTY_QUERY_PLAN,
-      {},
-      {},
-      false,
-      std::nullopt,
-      nullptr});
-}
-
-void CiderExecutionUnitGenerator::createOrUpdateExecutionUnit(
+void CiderExecutionUnitGenerator::updateExecutionUnit(
     const std::shared_ptr<const velox::core::FilterNode>& node,
-    std::shared_ptr<RelAlgExecutionUnit>& exe_unit) {
-  CHECK_NOTNULL(exe_unit);
+    std::shared_ptr<RelAlgExecutionUnit>& exeUnit) {
+  // update inputColDescriptors based on source node
+  exeUnit->input_col_descs = getInputColDescs(node->sources()[0]);
   // get column info from source node, for velox::TableScanNode, outputed
   // columns are actually tracked in its outputType
   auto sources = node->sources();
   CHECK_EQ(sources.size(), 1);
-  std::unordered_map<std::string, int> col_info;
+  std::unordered_map<std::string, int> colInfo;
   // current only support TableScan as filter's source
   if (std::dynamic_pointer_cast<const TableScanNode>(sources[0]) ||
       std::dynamic_pointer_cast<const ValuesNode>(sources[0])) {
-    col_info = get_col_info_from_source(sources[0]);
+    colInfo = getColInfoFromSource(sources[0]);
   } else {
     throw std::runtime_error(
         "current only support TableScan/ValuesNode as filter's source");
   }
-  auto cider_expr = ciderExprConverter_.toCiderExpr(node->filter(), col_info);
-  CHECK_NOTNULL(cider_expr);
-  const auto quals_cf = qual_to_conjunctive_form(fold_expr(cider_expr.get()));
-  exe_unit->simple_quals = quals_cf.simple_quals;
-  exe_unit->quals = quals_cf.quals;
-  for (auto expr : quals_cf.simple_quals) {
-    std::string content = expr->toString();
-    std::cout << content + "\n";
+  auto ciderExpr = ciderExprConverter_.toCiderExpr(node->filter(), colInfo);
+  if (!ciderExpr) {
+    translatable_ = false;
+    return;
   }
-  // case/window/... functions need rewrite
-  for (auto expr : quals_cf.quals) {
+  const auto qualsCf = qual_to_conjunctive_form(fold_expr(ciderExpr.get()));
+  exeUnit->simple_quals = qualsCf.simple_quals;
+  exeUnit->quals = qualsCf.quals;
+  for (auto expr : qualsCf.simple_quals) {
     std::string content = expr->toString();
-    std::cout << content + "\n";
+    std::cout << content << std::endl;
+  }
+  for (auto expr : qualsCf.quals) {
+    std::string content = expr->toString();
+    std::cout << content << std::endl;
+  }
+  for (auto expr : exeUnit->target_exprs) {
+    std::string content = expr->toString();
+    std::cout << content << std::endl;
   }
 }
 
-void CiderExecutionUnitGenerator::createOrUpdateExecutionUnit(
+void CiderExecutionUnitGenerator::updateExecutionUnit(
     const std::shared_ptr<const velox::core::ProjectNode>& node,
-    std::shared_ptr<RelAlgExecutionUnit>& exe_unit) {
-  CHECK_NOTNULL(exe_unit);
-  // in project+agg case, need construct a map target_exprs since
+    std::shared_ptr<RelAlgExecutionUnit>& exeUnit) {
+  // update inputColDescriptors based on source node
+  exeUnit->input_col_descs = getInputColDescs(node->sources()[0]);
+  // in project+agg case, need construct a map targetExprs since
   // omnisci doesn't use project masks so that we need pass down the real exprs
   // instead, such as c1*c2 as e1, we will put generate both c1*c2 and e1
-  // Ananlyzer::Expr collect col_info for expr translation
+  // Ananlyzer::Expr collect colInfo for expr translation
 
-  // using a map<mask, expr> for tracking target_exprs which will need in later
+  // using a map<mask, expr> for tracking targetExprs which will need in later
   // nodes
-  std::vector<Analyzer::Expr*> target_exprs;
-  auto col_info = get_col_info_from_source(node->sources()[0]);
+  std::vector<Analyzer::Expr*> targetExprs;
+  auto colInfo = getColInfoFromSource(node->sources()[0]);
   for (int i = 0; i < node->names().size(); i++) {
-    auto target_expr = ciderExprConverter_.toCiderExpr(
-        node->projections()[i], col_info); //    CHECK_NOTNULL(target_expr);
-    auto expr_name = node->names()[i];
+    auto targetExpr =
+        ciderExprConverter_.toCiderExpr(node->projections()[i], colInfo);
+    if (!targetExpr) {
+      translatable_ = false;
+      return;
+    }
+    auto exprName = node->names()[i];
     if (std::dynamic_pointer_cast<const CallTypedExpr>(
             node->projections()[i])) {
       // case sum(abs(x/y)), project need CAST info based on project Op in
       // Omnisci for callTypedExpr
-      auto wrapped_expr = ciderExprConverter_.wrap_expr_with_cast(
-          target_expr, node->outputType()->childAt(i));
-
-      exprMaskMap_.push_back(std::make_pair(expr_name, wrapped_expr));
+      auto wrappedExpr = ciderExprConverter_.wrapExprWithCast(
+          targetExpr, node->outputType()->childAt(i));
+      updateExprMap(exprName, wrappedExpr, i);
     } else {
-      exprMaskMap_.push_back(std::make_pair(expr_name, target_expr));
+      updateExprMap(exprName, targetExpr, i);
     }
   }
-  for (auto it : exprMaskMap_) {
-    target_exprs.push_back(it.second.get());
+  for (auto it : exprMap_) {
+    targetExprs.push_back(it.second.get());
   }
-  exe_unit->target_exprs = target_exprs;
+  exeUnit->target_exprs = targetExprs;
 }
 
-void CiderExecutionUnitGenerator::createOrUpdateExecutionUnit(
+void CiderExecutionUnitGenerator::updateExecutionUnit(
     const std::shared_ptr<const velox::core::AggregationNode>& node,
-    std::shared_ptr<RelAlgExecutionUnit>& exe_unit) {
-  // TODO: group-key not covered yet, which should update groupby_exprs
+    std::shared_ptr<RelAlgExecutionUnit>& exeUnit) {
+  // update inputColDescriptors based on source node
+  exeUnit->input_col_descs = getInputColDescs(node->sources()[0]);
+  // TODO: group-key not covered yet, which should update groupbyExprs
   // TODO: agg mask not covered since PlanBuilder can't build such a
   // semantic yet
   // TODO: how to handle ignoreNullKeys(true except in distinct case)? what are
-  // the aggregateNames? agg node will actually do update on the target_exprs
-  std::vector<Analyzer::Expr*> target_exprs;
-  auto col_info = get_col_info_from_source(node->sources()[0]);
+  // the aggregateNames? agg node will actually do update on the targetExprs
+  std::vector<Analyzer::Expr*> targetExprs;
+  auto colInfo = getColInfoFromSource(node->sources()[0]);
   CHECK_EQ(node->step(), core::AggregationNode::Step::kPartial);
-  std::shared_ptr<Analyzer::Constant> arg1; // 2nd aggregate parameter
-  // update target_exprs in exprMaskMap
+  // update targetExprs in exprMap
   // std::dynamic_pointer_cast<const ITypedExpr>(aggregate),
   for (auto aggregate : node->aggregates()) {
     auto expr = std::dynamic_pointer_cast<const ITypedExpr>(aggregate);
-    if (auto agg_expr = std::dynamic_pointer_cast<Analyzer::AggExpr>(
-            ciderExprConverter_.toCiderExpr(expr, col_info))) {
-      // get detailed target_expr from the map
-      if (auto arg_expr = std::dynamic_pointer_cast<Analyzer::ColumnVar>(
-              agg_expr->get_own_arg())) {
-        auto col_id = arg_expr->get_column_id();
-        std::string arg_name;
-        for (auto it = col_info.begin(); it != col_info.end(); ++it) {
-          if (it->second == col_id) {
-            arg_name = it->first;
-          }
-        }
-        for (int i = 0; i < exprMaskMap_.size(); i++) {
-          if (exprMaskMap_[i].first == arg_name) {
-            auto target_expr = std::make_shared<Analyzer::AggExpr>(
-                agg_expr->get_type_info(),
-                agg_expr->get_aggtype(),
-                exprMaskMap_[i].second,
-                false,
-                agg_expr->get_arg1());
-            exprMaskMap_[i] = std::make_pair(arg_name, target_expr);
-          }
-        }
+    auto ciderAgg = ciderExprConverter_.toCiderExpr(expr, colInfo);
+    if (!ciderAgg) {
+      translatable_ = false;
+      return;
+    }
+    if (auto aggExpr =
+            std::dynamic_pointer_cast<Analyzer::AggExpr>(ciderAgg)) {
+      // store the aggExpr and columnVar name in the map
+      if (auto aggField =
+              std::dynamic_pointer_cast<const FieldAccessTypedExpr>(
+                  aggregate->inputs()[0])) {
+        exprMap_.push_back(std::make_pair(aggField->name(), aggExpr));
       }
     } else {
       std::runtime_error("Error happened in agg target expr update");
     }
   }
-  for (auto it : exprMaskMap_) {
-    target_exprs.push_back(it.second.get());
+  for (auto it : exprMap_) {
+    targetExprs.push_back(it.second.get());
   }
-  exe_unit->target_exprs = target_exprs;
+  exeUnit->target_exprs = targetExprs;
+}
+
+void CiderExecutionUnitGenerator::updateExprMap(
+    const std::string exprKey,
+    std::shared_ptr<Analyzer::Expr>& expr,
+    int index) {
+  // replace child expr based on the string key, such as sum(e1) -> sum(x+y),
+  // need consider expr type order of exprs is important, need matched with
+  // final output
+  bool hasMatched = false;
+  for (auto it = exprMap_.begin(); it != exprMap_.end(); ++it) {
+    auto aggExpr =
+            std::dynamic_pointer_cast<Analyzer::AggExpr>(it->second);
+    if (it->first == exprKey && aggExpr) {
+      it->second = std::make_shared<Analyzer::AggExpr>(
+          aggExpr->get_type_info(),
+          aggExpr->get_aggtype(),
+          expr,
+          false,
+          aggExpr->get_arg1());
+      hasMatched = true;
+    } else if (it->first == exprKey) {
+      throw std::runtime_error("detected replacable expr but need further support.");
+    }
+  }
+  // insert this new target expr
+  if (!hasMatched) {
+    exprMap_.insert(exprMap_.begin() + index, std::make_pair(exprKey, expr));
+  }
 }
 } // namespace facebook::velox::cider
