@@ -67,21 +67,21 @@ TEST_F(ResultConvertTest, VeloxToCiderDirectConvert) {
   double* col_2 = reinterpret_cast<double*>(colBuffer[2]);
   for (auto idx = 0; idx < numRows; idx++) {
     if (data_0[idx] == std::nullopt) {
-      EXPECT_EQ(std::numeric_limits<int32_t>::min() + 1, col_0[idx]);
+      EXPECT_EQ(std::numeric_limits<int32_t>::min(), col_0[idx]);
     } else {
       EXPECT_EQ(data_0[idx], col_0[idx]);
     }
   }
   for (auto idx = 0; idx < numRows; idx++) {
     if (data_1[idx] == std::nullopt) {
-      EXPECT_EQ(std::numeric_limits<int64_t>::min() + 1, col_1[idx]);
+      EXPECT_EQ(std::numeric_limits<int64_t>::min(), col_1[idx]);
     } else {
       EXPECT_EQ(data_1[idx], col_1[idx]);
     }
   }
   for (auto idx = 0; idx < numRows; idx++) {
     if (data_2[idx] == std::nullopt) {
-      EXPECT_EQ(std::numeric_limits<double>::min() + 1, col_2[idx]);
+      EXPECT_EQ(DBL_MIN, col_2[idx]);
     } else {
       EXPECT_EQ(data_2[idx], col_2[idx]);
     }
@@ -114,9 +114,9 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
   }
 
   for (int i = 3; i < num_rows; i += 3) {
-    col_0[i] = std::numeric_limits<int32_t>::min() + 1;
-    col_1[i] = std::numeric_limits<int64_t>::min() + 1;
-    col_2[i] = std::numeric_limits<double>::min() + 1;
+    col_0[i] = std::numeric_limits<int32_t>::min();
+    col_1[i] = std::numeric_limits<int64_t>::min();
+    col_2[i] = DBL_MIN;
   }
 
   col_buffer[0] = reinterpret_cast<int8_t*>(col_0);
@@ -136,7 +136,7 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
   auto* rawValues = childVal->mutableRawValues();
   auto nulls = child_0->rawNulls();
   for (auto idx = 0; idx < num_rows; idx++) {
-    if (rawValues[idx] == std::numeric_limits<int32_t>::min() + 1) {
+    if (rawValues[idx] == std::numeric_limits<int32_t>::min()) {
       EXPECT_TRUE(bits::isBitNull(nulls, idx));
     } else {
       EXPECT_EQ(rawValues[idx], col_0[idx]);

@@ -31,7 +31,7 @@ void convert(
         auto nulls = child->rawNulls();
         for (auto pos = 0; pos < num_rows; pos++) {
           if (bits::isBitNull(nulls, pos)) {
-            rawValues[pos] = std::numeric_limits<bool>::min() + 1;
+            rawValues[pos] = std::numeric_limits<bool>::min();
           }
         }
       }
@@ -47,7 +47,7 @@ void convert(
         auto nulls = child->rawNulls();
         for (auto pos = 0; pos < num_rows; pos++) {
           if (bits::isBitNull(nulls, pos)) {
-            rawValues[pos] = std::numeric_limits<int8_t>::min() + 1;
+            rawValues[pos] = std::numeric_limits<int8_t>::min();
           }
         }
       }
@@ -63,7 +63,7 @@ void convert(
         auto nulls = child->rawNulls();
         for (auto pos = 0; pos < num_rows; pos++) {
           if (bits::isBitNull(nulls, pos)) {
-            rawValues[pos] = std::numeric_limits<int16_t>::min() + 1;
+            rawValues[pos] = std::numeric_limits<int16_t>::min();
           }
         }
       }
@@ -79,7 +79,7 @@ void convert(
         auto nulls = child->rawNulls();
         for (auto pos = 0; pos < num_rows; pos++) {
           if (bits::isBitNull(nulls, pos)) {
-            rawValues[pos] = std::numeric_limits<int32_t>::min() + 1;
+            rawValues[pos] = std::numeric_limits<int32_t>::min();
           }
         }
       }
@@ -95,7 +95,7 @@ void convert(
         auto nulls = child->rawNulls();
         for (auto pos = 0; pos < num_rows; pos++) {
           if (bits::isBitNull(nulls, pos)) {
-            rawValues[pos] = std::numeric_limits<int64_t>::min() + 1;
+            rawValues[pos] = std::numeric_limits<int64_t>::min();
           }
         }
       }
@@ -111,7 +111,7 @@ void convert(
         auto nulls = childVal->rawNulls();
         for (auto pos = 0; pos < num_rows; pos++) {
           if (bits::isBitNull(nulls, pos)) {
-            rawValues[pos] = std::numeric_limits<float>::min() + 1;
+            rawValues[pos] = FLT_MIN;
           }
         }
       }
@@ -127,7 +127,7 @@ void convert(
         auto nulls = childVal->rawNulls();
         for (auto pos = 0; pos < num_rows; pos++) {
           if (bits::isBitNull(nulls, pos)) {
-            rawValues[pos] = std::numeric_limits<double>::min() + 1;
+            rawValues[pos] = DBL_MIN;
           }
         }
       }
@@ -195,7 +195,7 @@ VectorPtr convertColumn(
       bool* dataBuffer = reinterpret_cast<bool*>(data_buffer);
       memcpy(rawValues, dataBuffer, num_rows * sizeof(bool));
       for (auto pos = 0; pos < num_rows; pos++) {
-        if (dataBuffer[pos] == std::numeric_limits<bool>::min() + 1) {
+        if (dataBuffer[pos] == std::numeric_limits<bool>::min()) {
           result->setNull(pos, true);
         }
       }
@@ -208,7 +208,7 @@ VectorPtr convertColumn(
       int8_t* dataBuffer = reinterpret_cast<int8_t*>(data_buffer);
       memcpy(rawValues, dataBuffer, num_rows * sizeof(int8_t));
       for (auto pos = 0; pos < num_rows; pos++) {
-        if (dataBuffer[pos] == std::numeric_limits<int8_t>::min() + 1) {
+        if (dataBuffer[pos] == std::numeric_limits<int8_t>::min()) {
           result->setNull(pos, true);
         }
       }
@@ -221,7 +221,7 @@ VectorPtr convertColumn(
       int16_t* dataBuffer = reinterpret_cast<int16_t*>(data_buffer);
       memcpy(rawValues, dataBuffer, num_rows * sizeof(int16_t));
       for (auto pos = 0; pos < num_rows; pos++) {
-        if (dataBuffer[pos] == std::numeric_limits<int16_t>::min() + 1) {
+        if (dataBuffer[pos] == std::numeric_limits<int16_t>::min()) {
           result->setNull(pos, true);
         }
       }
@@ -234,7 +234,7 @@ VectorPtr convertColumn(
       int32_t* dataBuffer = reinterpret_cast<int32_t*>(data_buffer);
       memcpy(rawValues, dataBuffer, num_rows * sizeof(int32_t));
       for (auto pos = 0; pos < num_rows; pos++) {
-        if (dataBuffer[pos] == std::numeric_limits<int32_t>::min() + 1) {
+        if (dataBuffer[pos] == std::numeric_limits<int32_t>::min()) {
           result->setNull(pos, true);
         }
       }
@@ -247,7 +247,7 @@ VectorPtr convertColumn(
       int64_t* dataBuffer = reinterpret_cast<int64_t*>(data_buffer);
       memcpy(rawValues, dataBuffer, num_rows * sizeof(int64_t));
       for (auto pos = 0; pos < num_rows; pos++) {
-        if (dataBuffer[pos] == std::numeric_limits<int64_t>::min() + 1) {
+        if (dataBuffer[pos] == std::numeric_limits<int64_t>::min()) {
           result->setNull(pos, true);
         }
       }
@@ -260,7 +260,7 @@ VectorPtr convertColumn(
       float* dataBuffer = reinterpret_cast<float*>(data_buffer);
       memcpy(rawValues, dataBuffer, num_rows * sizeof(float));
       for (auto pos = 0; pos < num_rows; pos++) {
-        if (dataBuffer[pos] == std::numeric_limits<float>::min() + 1) {
+        if (dataBuffer[pos] == FLT_MIN) {
           result->setNull(pos, true);
         }
       }
@@ -273,7 +273,7 @@ VectorPtr convertColumn(
       double* dataBuffer = reinterpret_cast<double*>(data_buffer);
       memcpy(rawValues, dataBuffer, num_rows * sizeof(double));
       for (auto pos = 0; pos < num_rows; pos++) {
-        if (dataBuffer[pos] == std::numeric_limits<double>::min() + 1) {
+        if (dataBuffer[pos] == DBL_MIN) {
           result->setNull(pos, true);
         }
       }

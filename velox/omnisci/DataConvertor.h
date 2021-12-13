@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cfloat>
 #include <cstring>
 #include <iostream>
 #include <vector>
