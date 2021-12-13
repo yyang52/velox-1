@@ -32,6 +32,7 @@ target_link_libraries(
 
 add_executable(
   velox_exec_test
+  CiderTest.cpp
   CrossJoinTest.cpp
   DriverTest.cpp
   EnforceSingleRowTest.cpp
@@ -56,6 +57,7 @@ add_executable(
   OrderByTest.cpp
   MergeTest.cpp
   HashJoinTest.cpp
+  HybridExecOperatorTest.cpp
   PlanNodeToStringTest.cpp
   FunctionSignatureBuilderTest.cpp
   UnnestTest.cpp)
@@ -70,6 +72,7 @@ target_link_libraries(
   velox_exec_test_lib
   velox_functions_test_lib
   velox_exec
+  cider_exec
   velox_dwio_dwrf_writer
   velox_dwio_common
   velox_aggregates
@@ -103,4 +106,6 @@ target_link_libraries(
   ${gflags_LIBRARIES}
   ${GLOG}
   ${FMT}
-  ${FILESYSTEM})
+  ${FILESYSTEM}
+  LLVM
+  libDBEngine.so)

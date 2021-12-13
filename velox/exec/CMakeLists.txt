@@ -29,6 +29,7 @@ add_library(
   HashProbe.cpp
   HashStringAllocator.cpp
   HashTable.cpp
+  HybridExecOperator.cpp
   JoinBridge.cpp
   Limit.cpp
   LocalPartition.cpp
@@ -49,6 +50,8 @@ add_library(
   Values.cpp
   VectorHasher.cpp)
 
+find_library(cider cider)
+
 target_link_libraries(
   velox_exec
   velox_core
@@ -56,7 +59,8 @@ target_link_libraries(
   velox_connector
   velox_time
   velox_codegen
-  velox_common_base)
+  velox_common_base
+  cider)
 
 if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)

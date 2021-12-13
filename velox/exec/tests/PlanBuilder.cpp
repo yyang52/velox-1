@@ -20,6 +20,12 @@
 #include "velox/parse/Expressions.h"
 #include "velox/parse/ExpressionsParser.h"
 
+// FIXME: include order matters since omnisci header file is not clean yet and
+// may define some dirty macro which will influence velox code base, so we put
+// it at the end of include chain. This is just a work around, if some further
+// code change have similar issue, best way is make header file cleaner.
+#include <velox/exec/HybridExecOperator.h>
+
 using namespace facebook::velox;
 using namespace facebook::velox::connector::hive;
 
@@ -127,6 +133,13 @@ PlanBuilder& PlanBuilder::project(
 PlanBuilder& PlanBuilder::filter(const std::string& filter) {
   planNode_ = std::make_shared<core::FilterNode>(
       nextPlanNodeId(), parseExpr(filter, planNode_->outputType()), planNode_);
+  return *this;
+}
+
+PlanBuilder& PlanBuilder::hybrid(const std::string& hybrid) {
+  // todo: how to get outputType?
+  planNode_ = std::make_shared<core::HybridPlanNode>(
+      nextPlanNodeId(), planNode_->outputType(), nullptr, nullptr, planNode_);
   return *this;
 }
 
