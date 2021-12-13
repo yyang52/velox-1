@@ -11,20 +11,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "velox/omnisci/RawDataConvertor.h"
 #include "velox/omnisci/ArrowDataConvertor.h"
+#include "velox/omnisci/RawDataConvertor.h"
 namespace facebook::velox::omnisci {
-  std::shared_ptr<DataConvertor> DataConvertor::create(CONVERT_TYPE type) {
-    std::shared_ptr<DataConvertor> convertor;
-    switch (type) {
-      case CONVERT_TYPE::DIRECT:
-        convertor = std::make_shared<RawDataConvertor>();
-        return convertor;
-      case CONVERT_TYPE::ARROW:
-        convertor = std::make_shared<ArrowDataConvertor>();
-        return convertor;
-      default:
-        VELOX_USER_FAIL("invalid input");
-    }
+std::shared_ptr<DataConvertor> DataConvertor::create(CONVERT_TYPE type) {
+  std::shared_ptr<DataConvertor> convertor;
+  switch (type) {
+    case CONVERT_TYPE::DIRECT:
+      convertor = std::make_shared<RawDataConvertor>();
+      return convertor;
+    case CONVERT_TYPE::ARROW:
+      convertor = std::make_shared<ArrowDataConvertor>();
+      return convertor;
+    default:
+      VELOX_USER_FAIL("invalid input");
   }
+}
 } // namespace facebook::velox::omnisci

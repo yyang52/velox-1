@@ -13,15 +13,20 @@
  */
 #include "velox/omnisci/ArrowDataConvertor.h"
 namespace facebook::velox::omnisci {
-  CiderResultSet ArrowDataConvertor::convertToCider(RowVectorPtr input, int num_rows) {
-    //TODO
-    VELOX_NYI("Arrow conversion not yet supported.");
-  };
+CiderResultSet ArrowDataConvertor::convertToCider(
+    RowVectorPtr input,
+    int num_rows) {
+  // TODO
+  VELOX_NYI("Arrow conversion not yet supported.");
+};
 
-  RowVectorPtr ArrowDataConvertor::convertToRowVector(int8_t** col_buffer, std::vector<std::string> col_names, 
-                                                      std::vector<std::string> col_types, int num_rows,
-                                                      memory::MemoryPool* pool) {
-    //TODO
-    VELOX_NYI("Arrow conversion not yet supported.");
-  };
+RowVectorPtr ArrowDataConvertor::convertToRowVector(
+    int8_t** col_buffer,
+    std::vector<std::string> col_names,
+    std::vector<std::string> col_types,
+    int num_rows,
+    memory::MemoryPool* pool) {
+  // TODO
+  VELOX_NYI("Arrow conversion not yet supported.");
+};
 } // namespace facebook::velox::omnisci

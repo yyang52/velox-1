@@ -20,14 +20,17 @@
 #include "velox/omnisci/DataConvertor.h"
 
 namespace facebook::velox::omnisci {
-  class ArrowDataConvertor : public DataConvertor {
-    public:
-      ArrowDataConvertor(){}
+class ArrowDataConvertor : public DataConvertor {
+ public:
+  ArrowDataConvertor() {}
 
-      CiderResultSet convertToCider(RowVectorPtr input, int num_rows) override;
+  CiderResultSet convertToCider(RowVectorPtr input, int num_rows) override;
 
-      RowVectorPtr convertToRowVector(int8_t** col_buffer,  std::vector<std::string> col_names, 
-                                      std::vector<std::string> col_types, int num_rows, 
-                                      memory::MemoryPool* pool) override;
-    };
+  RowVectorPtr convertToRowVector(
+      int8_t** col_buffer,
+      std::vector<std::string> col_names,
+      std::vector<std::string> col_types,
+      int num_rows,
+      memory::MemoryPool* pool) override;
+};
 } // namespace facebook::velox::omnisci

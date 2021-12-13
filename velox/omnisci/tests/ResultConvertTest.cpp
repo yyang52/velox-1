@@ -11,8 +11,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <cstring>
 #include <gtest/gtest.h>
+#include <cstring>
 #include <iostream>
 #include <vector>
 
@@ -25,14 +25,15 @@ using namespace facebook::velox::omnisci;
 using facebook::velox::omnisci::DataConvertor;
 
 class ResultConvertTest : public testing::Test {
-  protected:
-    std::unique_ptr<memory::ScopedMemoryPool> pool_{
-        memory::getDefaultScopedMemoryPool()};
-    VectorMaker vectorMaker_{pool_.get()};
+ protected:
+  std::unique_ptr<memory::ScopedMemoryPool> pool_{
+      memory::getDefaultScopedMemoryPool()};
+  VectorMaker vectorMaker_{pool_.get()};
 };
 
 TEST_F(ResultConvertTest, VeloxToCiderDirectConvert) {
-  std::shared_ptr<DataConvertor> convertor = DataConvertor::create(CONVERT_TYPE::DIRECT);
+  std::shared_ptr<DataConvertor> convertor =
+      DataConvertor::create(CONVERT_TYPE::DIRECT);
   int numRows = 10;
   auto rowType =
       ROW({"col_0", "col_1", "col_2"}, {INTEGER(), BIGINT(), DOUBLE()});
@@ -44,7 +45,16 @@ TEST_F(ResultConvertTest, VeloxToCiderDirectConvert) {
       0, 1, std::nullopt, 3, 1024, -123456, -99, -999, std::nullopt, -1};
   auto c_1 = vectorMaker_.flatVectorNullable<int64_t>(data_1);
   std::vector<std::optional<double>> data_2 = {
-      0.5, 1, std::nullopt, 3.14, 1024, -123456, -99.99, -999, std::nullopt, -1};
+      0.5,
+      1,
+      std::nullopt,
+      3.14,
+      1024,
+      -123456,
+      -99.99,
+      -999,
+      std::nullopt,
+      -1};
   auto c_2 = vectorMaker_.flatVectorNullable<double>(data_2);
 
   auto rowVector = vectorMaker_.rowVector({c_0, c_1, c_2});
@@ -79,18 +89,19 @@ TEST_F(ResultConvertTest, VeloxToCiderDirectConvert) {
 }
 
 TEST_F(ResultConvertTest, VeloxToCiderArrowConvert) {
-  std::shared_ptr<DataConvertor> convertor = DataConvertor::create(CONVERT_TYPE::ARROW);
+  std::shared_ptr<DataConvertor> convertor =
+      DataConvertor::create(CONVERT_TYPE::ARROW);
   RowVectorPtr input;
   int num_rows;
-  //CiderResultSet crs = convertor->convertToCider(input, num_rows);
-  //CHECK EQUAL
+  // CiderResultSet crs = convertor->convertToCider(input, num_rows);
+  // CHECK EQUAL
 }
 
 TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
-  std::shared_ptr<DataConvertor> convertor = DataConvertor::create(CONVERT_TYPE::DIRECT);
+  std::shared_ptr<DataConvertor> convertor =
+      DataConvertor::create(CONVERT_TYPE::DIRECT);
   int num_rows = 10;
-  int8_t** col_buffer =
-      (int8_t**)std::malloc(sizeof(int8_t*) * 3);
+  int8_t** col_buffer = (int8_t**)std::malloc(sizeof(int8_t*) * 3);
 
   int32_t* col_0 = (int32_t*)std::malloc(sizeof(int32_t) * 10);
   int64_t* col_1 = (int64_t*)std::malloc(sizeof(int64_t) * 10);
@@ -114,7 +125,8 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
 
   std::vector<std::string> col_names = {"col_0", "col_1", "col_2"};
   std::vector<std::string> col_types = {"INTEGER", "BIGINT", "DOUBLE"};
-  RowVectorPtr rvp = convertor->convertToRowVector(col_buffer, col_names, col_types, num_rows, pool_.get());
+  RowVectorPtr rvp = convertor->convertToRowVector(
+      col_buffer, col_names, col_types, num_rows, pool_.get());
   RowVector* row = rvp.get();
   auto* rowVector = row->as<RowVector>();
   EXPECT_EQ(3, rowVector->childrenSize());
@@ -129,8 +141,8 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
     } else {
       EXPECT_EQ(rawValues[idx], col_0[idx]);
     }
-  }        
-  //release buffer
+  }
+  // release buffer
   std::free(col_buffer[0]);
   std::free(col_buffer[1]);
   std::free(col_buffer[2]);
@@ -138,9 +150,10 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
 }
 
 TEST_F(ResultConvertTest, CiderToVeloxArrowConvert) {
-  std::shared_ptr<DataConvertor> convertor = DataConvertor::create(CONVERT_TYPE::ARROW);
+  std::shared_ptr<DataConvertor> convertor =
+      DataConvertor::create(CONVERT_TYPE::ARROW);
   int8_t** col_buffer;
   int num_rows;
-  //RowVectorPtr rvp = convertor->convertToRowVector(col_buffer, num_rows);
-  //CHECK EQUAL
+  // RowVectorPtr rvp = convertor->convertToRowVector(col_buffer, num_rows);
+  // CHECK EQUAL
 }
