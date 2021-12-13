@@ -20,16 +20,29 @@
 #include "QueryEngine/RelAlgExecutionUnit.h"
 
 namespace facebook::velox::core {
+/**
+ * indicate Ops in HybridNode
+ */
+struct NodeProperty {
+  bool hasFilter;
+  bool hasProject;
+  bool hasAgg;
+  bool hasGroupBy;
+  bool hasOrderBy;
+};
+
 class HybridPlanNode : public PlanNode {
  public:
   HybridPlanNode(
       const PlanNodeId& id,
       const RowTypePtr& outputType,
       const std::shared_ptr<RelAlgExecutionUnit> relAlgExecUnit,
+      const std::shared_ptr<NodeProperty> nodeProperty,
       std::shared_ptr<const PlanNode> source)
       : PlanNode(id),
         outputType_(outputType),
         relAlgExecUnit_(relAlgExecUnit),
+        nodeProperty_(nodeProperty),
         sources_{source} {}
 
   const RowTypePtr& outputType() const override {
@@ -48,5 +61,6 @@ class HybridPlanNode : public PlanNode {
   const std::vector<std::shared_ptr<const PlanNode>> sources_;
   const RowTypePtr outputType_;
   const std::shared_ptr<RelAlgExecutionUnit> relAlgExecUnit_;
+  const std::shared_ptr<NodeProperty> nodeProperty_;
 };
 } // namespace facebook::velox::core

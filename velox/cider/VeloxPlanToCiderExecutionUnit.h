@@ -12,8 +12,8 @@
  * limitations under the License.
  */
 
-#include "core/PlanNode.h"
 #include "core/HybridPlanNode.h"
+#include "core/PlanNode.h"
 
 #include "cider/VeloxToCiderExpr.h"
 
@@ -30,16 +30,40 @@ constexpr char const* EMPTY_QUERY_PLAN = "";
  */
 struct CiderParamContext {
   CiderParamContext(RowTypePtr rowType, PlanNodeId id)
-      : rowType_(rowType), id_(id) {}
+      : rowType_(rowType),
+        id_(id),
+        inputDescs_{},
+        inputColDescs_{},
+        simpleQuals_{},
+        quals_{},
+        targetExprMap_{},
+        groupByExprMap_{},
+        orderByCollation_{},
+        limit_(0),
+        offset_(0),
+        nodeProperty_({false, false, false, false, false}) {}
 
   RowTypePtr rowType_;
   PlanNodeId id_;
+  std::vector<InputDescriptor> inputDescs_;
+  std::list<std::shared_ptr<const InputColDescriptor>> inputColDescs_;
+  std::list<std::shared_ptr<Analyzer::Expr>> simpleQuals_;
+  std::list<std::shared_ptr<Analyzer::Expr>> quals_;
+  std::vector<std::pair<std::string, std::shared_ptr<Analyzer::Expr>>>
+      targetExprMap_;
+  std::vector<std::pair<std::string, std::shared_ptr<Analyzer::Expr>>>
+      groupByExprMap_;
+  std::list<Analyzer::OrderEntry>
+      orderByCollation_;
+  size_t limit_;
+  size_t offset_;
+  NodeProperty nodeProperty_;
 };
 
 class CiderExecutionUnitGenerator {
  public:
   explicit CiderExecutionUnitGenerator()
-      : ciderExprConverter_(), exprMap_{}, translatable_{true} {}
+      : ciderExprConverter_(), translatable_{true} {}
 
   /**
    *   Keep original output node and source node from Velox
@@ -53,26 +77,35 @@ class CiderExecutionUnitGenerator {
  private:
   std::shared_ptr<const velox::core::PlanNode> transformPlanInternal(
       std::shared_ptr<CiderParamContext> ctx,
-      const std::shared_ptr<const velox::core::PlanNode> current,
-      std::shared_ptr<RelAlgExecutionUnit>& execUnit);
+      const std::shared_ptr<const velox::core::PlanNode> current);
 
-  void updateExecutionUnit(
+  void updateCiderParamCtx(
       const std::shared_ptr<const velox::core::FilterNode>& node,
-      std::shared_ptr<RelAlgExecutionUnit>& exeUnit);
+      std::shared_ptr<CiderParamContext> ctx);
 
-  void updateExecutionUnit(
+  void updateCiderParamCtx(
       const std::shared_ptr<const velox::core::ProjectNode>& node,
-      std::shared_ptr<RelAlgExecutionUnit>& exeUnit);
+      std::shared_ptr<CiderParamContext> ctx);
 
-  void updateExecutionUnit(
+  void updateCiderParamCtx(
       const std::shared_ptr<const velox::core::AggregationNode>& node,
-      std::shared_ptr<RelAlgExecutionUnit>& exeUnit);
+      std::shared_ptr<CiderParamContext> ctx);
 
-  void updateExprMap(const std::string exprKey, std::shared_ptr<Analyzer::Expr>& expr, int index);
+  void updateCiderParamCtx(
+      const std::shared_ptr<const velox::core::OrderByNode>& node,
+      std::shared_ptr<CiderParamContext> ctx);
+
+  void updateExprMap(
+      std::shared_ptr<CiderParamContext> ctx,
+      const std::string exprKey,
+      std::shared_ptr<Analyzer::Expr>& expr,
+      int index);
+
+  std::shared_ptr<RelAlgExecutionUnit> getExeUnitBasedOnContext(
+      std::shared_ptr<CiderParamContext> ctx);
 
   VeloxToCiderExprConverter ciderExprConverter_;
-  std::vector<std::pair<std::string, std::shared_ptr<Analyzer::Expr>>>
-      exprMap_;
+
   bool translatable_;
 };
 

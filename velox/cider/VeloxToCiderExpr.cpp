@@ -58,6 +58,10 @@ SQLOps getCiderSqlOps(const std::string op) {
     return SQLOps::kLE;
   } else if (op == "multiply") {
     return SQLOps::kMULTIPLY;
+  } else if (op == "plus") {
+    return SQLOps::kPLUS;
+  } else if (op == "modulus") {
+    return SQLOps::kMODULO;
   } else {
     throw std::runtime_error(op + " is not yet supported");
   }
@@ -225,18 +229,25 @@ std::shared_ptr<Analyzer::Expr> VeloxToCiderExprConverter::toCiderExpr(
   if (vExpr->name() == "gt" || vExpr->name() == "lt" ||
       vExpr->name() == "gte" || vExpr->name() == "lte" ||
       vExpr->name() == "eq" || vExpr->name() == "and" ||
-      vExpr->name() == "multiply") {
+      vExpr->name() == "multiply" || vExpr->name() == "plus" ||
+      vExpr->name() == "modulus") {
     auto type = getCiderType(vExpr->type(), false);
     auto inputs = vExpr->inputs();
     CHECK_EQ(inputs.size(), 2);
     SQLQualifier qualifier = SQLQualifier::kONE;
-    return std::make_shared<Analyzer::BinOper>(
-        type,
-        false,
-        getCiderSqlOps(vExpr->name()),
-        qualifier,
-        toCiderExpr(inputs[0], colInfo),
-        toCiderExpr(inputs[1], colInfo));
+    // TODO: bug here, need also check child expr is null or not
+    auto leftExpr = toCiderExpr(inputs[0], colInfo);
+    auto rightExpr = toCiderExpr(inputs[1], colInfo);
+    if (leftExpr && rightExpr) {
+      return std::make_shared<Analyzer::BinOper>(
+          type,
+          false,
+          getCiderSqlOps(vExpr->name()),
+          qualifier,
+          leftExpr,
+          rightExpr);
+    }
+    return nullptr;
   }
   // between needs change from between(ROW["c1"],0.6,1.6)
   // to AND(GE(ROW['c1'], 0.6), LE(ROW['c1'], 1.6))

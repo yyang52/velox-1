@@ -25,6 +25,9 @@ using namespace facebook::velox::exec::test;
 
 using facebook::velox::test::BatchMaker;
 
+static const core::SortOrder kAscNullsLast(true, false);
+static const core::SortOrder kDescNullsLast(false, false);
+
 class CiderTest : public OperatorTestBase {
  protected:
   std::shared_ptr<const RowType> rowType_{
@@ -32,8 +35,30 @@ class CiderTest : public OperatorTestBase {
           {INTEGER(), DOUBLE(), INTEGER(), INTEGER()})};
 };
 
+
 // Test for consecutive filter and project fusion.
-TEST_F(CiderTest, filterProjectFused) {
+TEST_F(CiderTest, filterTest) {
+  std::vector<RowVectorPtr> vectors;
+  for (int32_t i = 0; i < 10; ++i) {
+    auto vector = std::dynamic_pointer_cast<RowVector>(
+        BatchMaker::createBatch(rowType_, 100, *pool_));
+    vectors.push_back(vector);
+  }
+  createDuckDbTable(vectors);
+  std::string filter = "c0 % 10  > 0";
+  auto plan = PlanBuilder().values(vectors).filter(filter).partitionedOutput({}, 1).planNode();
+  auto content = plan->toString(true, true);
+  std::cout << content;
+  try {
+    CiderExecutionUnitGenerator generator;
+    auto cider_plan = generator.transformPlan(plan);
+  } catch (std::runtime_error& error) {
+    std::cout << error.what();
+  }
+}
+
+// Test for consecutive filter and project fusion.
+TEST_F(CiderTest, compoundTest) {
   std::vector<RowVectorPtr> vectors;
   for (int32_t i = 0; i < 10; ++i) {
     auto vector = std::dynamic_pointer_cast<RowVector>(
@@ -47,24 +72,23 @@ TEST_F(CiderTest, filterProjectFused) {
           .values(vectors)
           .filter("(c2 < 1000) and (c1 between 0.6 and 1.6) and (c0 >= 100)")
           .project(
-              std::vector<std::string>{"c0 * c1"},
-              std::vector<std::string>{"e1"})
+              std::vector<std::string>{"c0", "c0+c1", "c0 * c1"},
+              std::vector<std::string>{"e0", "e1", "e2"})
           .aggregation(
-                    {},
-                    {"sum(e1)"},
+                    {0,1},
+                    {"sum(e2)"},
                     {},
                     core::AggregationNode::Step::kPartial,
                     false)
+          .orderBy({0, 1}, {kAscNullsLast, kDescNullsLast}, false)
           .partitionedOutput({}, 1)
           .planNode();
   auto content = plan->toString(true, true);
   std::cout << content;
   try {
     CiderExecutionUnitGenerator generator;
-    // for test
     auto cider_plan = generator.transformPlan(plan);
   } catch (std::runtime_error& error) {
-    std::string message = error.what();
     std::cout << error.what();
   }
 }
