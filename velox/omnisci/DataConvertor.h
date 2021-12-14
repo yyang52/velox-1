@@ -21,6 +21,7 @@
 
 #include "velox/common/base/VeloxException.h"
 #include "velox/common/memory/Memory.h"
+#include "velox/omnisci/CiderNullValues.h"
 #include "velox/vector/ComplexVector.h"
 
 using namespace facebook::velox;

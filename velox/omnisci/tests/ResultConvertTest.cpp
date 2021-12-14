@@ -132,14 +132,38 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
   EXPECT_EQ(3, rowVector->childrenSize());
   VectorPtr& child_0 = rowVector->childAt(0);
   EXPECT_TRUE(child_0->mayHaveNulls());
-  auto childVal = child_0->asFlatVector<int32_t>();
-  auto* rawValues = childVal->mutableRawValues();
-  auto nulls = child_0->rawNulls();
+  auto childVal_0 = child_0->asFlatVector<int32_t>();
+  auto* rawValues_0 = childVal_0->mutableRawValues();
+  auto nulls_0 = child_0->rawNulls();
   for (auto idx = 0; idx < num_rows; idx++) {
-    if (rawValues[idx] == std::numeric_limits<int32_t>::min()) {
-      EXPECT_TRUE(bits::isBitNull(nulls, idx));
+    if (rawValues_0[idx] == std::numeric_limits<int32_t>::min()) {
+      EXPECT_TRUE(bits::isBitNull(nulls_0, idx));
     } else {
-      EXPECT_EQ(rawValues[idx], col_0[idx]);
+      EXPECT_EQ(rawValues_0[idx], col_0[idx]);
+    }
+  }
+  VectorPtr& child_1 = rowVector->childAt(1);
+  EXPECT_TRUE(child_1->mayHaveNulls());
+  auto childVal_1 = child_1->asFlatVector<int64_t>();
+  auto* rawValues_1 = childVal_1->mutableRawValues();
+  auto nulls_1 = child_1->rawNulls();
+  for (auto idx = 0; idx < num_rows; idx++) {
+    if (rawValues_1[idx] == std::numeric_limits<int64_t>::min()) {
+      EXPECT_TRUE(bits::isBitNull(nulls_1, idx));
+    } else {
+      EXPECT_EQ(rawValues_1[idx], col_1[idx]);
+    }
+  }
+  VectorPtr& child_2 = rowVector->childAt(2);
+  EXPECT_TRUE(child_2->mayHaveNulls());
+  auto childVal_2 = child_2->asFlatVector<double>();
+  auto* rawValues_2 = childVal_2->mutableRawValues();
+  auto nulls_2 = child_2->rawNulls();
+  for (auto idx = 0; idx < num_rows; idx++) {
+    if (rawValues_2[idx] == DBL_MIN) {
+      EXPECT_TRUE(bits::isBitNull(nulls_2, idx));
+    } else {
+      EXPECT_EQ(rawValues_2[idx], col_2[idx]);
     }
   }
   // release buffer
