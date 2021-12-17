@@ -23,6 +23,7 @@
 // it at the end of include chain. This is just a work around, if some further
 // code change have similar issue, best way is make header file cleaner.
 #include "Cider/CiderExecutionKernel.h"
+#include "QueryEngine/RelAlgExecutionUnit.h"
 
 namespace facebook::velox::exec {
 class HybridExecOperator : public Operator {
@@ -38,6 +39,8 @@ class HybridExecOperator : public Operator {
             hybridPlanNode->id(),
             "hybrid") {
     // construct and compile a kernel here.
+    auto exeUnit =
+        hybridPlanNode->getCiderParamContext()->getExeUnitBasedOnContext();
     ciderKernel_ = CiderExecutionKernel::create();
     // todo: we don't have input yet.
     // ciderKernel_->compileWorkUnit();

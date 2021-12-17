@@ -61,18 +61,6 @@ bool isSourceNode(const std::shared_ptr<const velox::core::PlanNode>& node) {
   return false;
 }
 
-SortInfo getSortInfoFromCtx(std::shared_ptr<CiderParamContext> ctx) {
-  if (ctx->orderByCollation_.size() == 0) {
-    return {{}, SortAlgorithm::Default, 0, 0};
-  } else {
-    return {
-        ctx->orderByCollation_,
-        SortAlgorithm::SpeculativeTopN,
-        ctx->limit_,
-        ctx->offset_};
-  }
-}
-
 } // namespace
 
 std::shared_ptr<velox::core::PlanNode>
@@ -110,14 +98,17 @@ CiderExecutionUnitGenerator::transformPlanInternal(
   // previous generated metadata. And one new hybrid plan node is built with
   // this updated exec unit info.
   if (isSourceNode(current)) {
-    auto execUnit = getExeUnitBasedOnContext(ctx);
-    if (execUnit->target_exprs.size() != 0) {
+    if (ctx->targetExprMap_.size() != 0) {
+      // fake table with id 100
+      std::vector<InputDescriptor> inputDescs;
+      inputDescs.emplace_back(100, 0);
+      ctx->inputDescs_ = inputDescs;
       // FIXME: How to update plan ID info?
       // Still requiring table scan info to generate enough for
       // RelAlgExecutionUnit
       return std::dynamic_pointer_cast<const facebook::velox::core::PlanNode>(
           std::make_shared<velox::core::HybridPlanNode>(
-              ctx->id_, ctx->rowType_, execUnit, std::make_shared<NodeProperty>(ctx->nodeProperty_), current));
+              ctx->id_, ctx->rowType_, ctx, current));
     }
     return current;
   }
@@ -308,45 +299,6 @@ void CiderExecutionUnitGenerator::updateCiderParamCtx(
   ctx->orderByCollation_ = result;
 }
 
-std::shared_ptr<RelAlgExecutionUnit>
-CiderExecutionUnitGenerator::getExeUnitBasedOnContext(
-    std::shared_ptr<CiderParamContext> ctx) {
-
-  std::vector<Analyzer::Expr*> targetExprs;
-  std::list<std::shared_ptr<Analyzer::Expr>> groupByExprs;
-  for (auto it : ctx->targetExprMap_) {
-    targetExprs.push_back(it.second.get());
-  }
-  if (targetExprs.size() == 0) {
-    return nullptr;
-  }
-  for (auto it : ctx->groupByExprMap_) {
-    groupByExprs.push_back(it.second);
-  }
-  if (groupByExprs.size() == 0) {
-    std::shared_ptr<Analyzer::Expr> empty;
-    groupByExprs.emplace_back(empty);
-  }
-  JoinQualsPerNestingLevel leftDeepJoinQuals;
-  return std::make_shared<RelAlgExecutionUnit>(RelAlgExecutionUnit{
-      ctx->inputDescs_,
-      ctx->inputColDescs_,
-      ctx->simpleQuals_,
-      ctx->quals_,
-      leftDeepJoinQuals,
-      groupByExprs,
-      targetExprs,
-      nullptr,
-      getSortInfoFromCtx(ctx),
-      0,
-      RegisteredQueryHint::defaults(),
-      EMPTY_QUERY_PLAN,
-      {},
-      {},
-      false,
-      std::nullopt,
-      nullptr});
-}
 // update the exprMaps: ctx->targetExprMap_, ctx->groupByExprMap_,
 // orderByExprMap
 void CiderExecutionUnitGenerator::updateExprMap(

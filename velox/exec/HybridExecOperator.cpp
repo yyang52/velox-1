@@ -19,7 +19,6 @@
 #include "HybridExecOperator.h"
 
 namespace facebook::velox::exec {
-
 Operator::PlanNodeTranslator HybridExecOperator::planNodeTranslator =
     [](DriverCtx* ctx,
        int32_t id,

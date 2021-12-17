@@ -17,8 +17,6 @@
 
 #include "cider/VeloxToCiderExpr.h"
 
-#include "QueryEngine/RelAlgExecutionUnit.h"
-
 namespace facebook::velox::cider {
 
 constexpr char const* EMPTY_QUERY_PLAN = "";
@@ -28,38 +26,6 @@ constexpr char const* EMPTY_QUERY_PLAN = "";
  * To keep state of the last node, assuming the output type should be the same
  * as the 1st node
  */
-struct CiderParamContext {
-  CiderParamContext(RowTypePtr rowType, PlanNodeId id)
-      : rowType_(rowType),
-        id_(id),
-        inputDescs_{},
-        inputColDescs_{},
-        simpleQuals_{},
-        quals_{},
-        targetExprMap_{},
-        groupByExprMap_{},
-        orderByCollation_{},
-        limit_(0),
-        offset_(0),
-        nodeProperty_({false, false, false, false, false}) {}
-
-  RowTypePtr rowType_;
-  PlanNodeId id_;
-  std::vector<InputDescriptor> inputDescs_;
-  std::list<std::shared_ptr<const InputColDescriptor>> inputColDescs_;
-  std::list<std::shared_ptr<Analyzer::Expr>> simpleQuals_;
-  std::list<std::shared_ptr<Analyzer::Expr>> quals_;
-  std::vector<std::pair<std::string, std::shared_ptr<Analyzer::Expr>>>
-      targetExprMap_;
-  std::vector<std::pair<std::string, std::shared_ptr<Analyzer::Expr>>>
-      groupByExprMap_;
-  std::list<Analyzer::OrderEntry>
-      orderByCollation_;
-  size_t limit_;
-  size_t offset_;
-  NodeProperty nodeProperty_;
-};
-
 class CiderExecutionUnitGenerator {
  public:
   explicit CiderExecutionUnitGenerator()
@@ -100,9 +66,6 @@ class CiderExecutionUnitGenerator {
       const std::string exprKey,
       std::shared_ptr<Analyzer::Expr>& expr,
       int index);
-
-  std::shared_ptr<RelAlgExecutionUnit> getExeUnitBasedOnContext(
-      std::shared_ptr<CiderParamContext> ctx);
 
   VeloxToCiderExprConverter ciderExprConverter_;
 

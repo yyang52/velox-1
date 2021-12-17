@@ -139,7 +139,7 @@ PlanBuilder& PlanBuilder::filter(const std::string& filter) {
 PlanBuilder& PlanBuilder::hybrid(const std::string& hybrid) {
   // todo: how to get outputType?
   planNode_ = std::make_shared<core::HybridPlanNode>(
-      nextPlanNodeId(), planNode_->outputType(), nullptr, nullptr, planNode_);
+      nextPlanNodeId(), planNode_->outputType(), nullptr, planNode_);
   return *this;
 }
 
