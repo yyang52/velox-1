@@ -31,6 +31,21 @@ constexpr inline int64_t inline_int_null_value() {
                                   : std::numeric_limits<T>::max();
 }
 
+template <typename T>
+constexpr inline T inline_fp_null_value() {
+  return T{};
+}
+
+template <>
+constexpr inline float inline_fp_null_value<float>() {
+  return NULL_FLOAT;
+}
+
+template <>
+constexpr inline double inline_fp_null_value<double>() {
+  return NULL_DOUBLE;
+}
+
 inline int64_t inline_int_null_val(const TypePtr& vType) {
   switch (vType->kind()) {
     case TypeKind::BOOLEAN:
