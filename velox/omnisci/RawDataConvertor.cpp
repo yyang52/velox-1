@@ -24,48 +24,48 @@ void toCiderImpl(
     int num_rows) {
   using T = typename TypeTraits<kind>::NativeType;
   int8_t** col_buffer = *col_buffer_ptr;
-  if (std::is_same<T, bool>::value) {
-    auto childVal = child->asFlatVector<bool>();
-    auto* rawValues = childVal->mutableRawValues<uint64_t>();
-    int size = (num_rows + 8 - 1) / 8;
-    // some known issues to be fixed for bool type
-    uint8_t* column = (uint8_t*)std::malloc(sizeof(uint8_t) * num_rows);
+  auto childVal = child->asFlatVector<T>();
+  auto* rawValues = childVal->mutableRawValues();
+  T* column = (T*)std::malloc(sizeof(T) * num_rows);
+  if (child->mayHaveNulls()) {
     auto nulls = child->rawNulls();
     for (auto pos = 0; pos < num_rows; pos++) {
-      if (child->mayHaveNulls() && bits::isBitNull(nulls, pos)) {
-        rawValues[pos] = inline_int_null_value<int8_t>();
-      } else {
-        bits::setBit(rawValues, pos, childVal->valueAt(pos));
-      }
-    }
-    memcpy(
-        column,
-        reinterpret_cast<uint8_t*>(rawValues),
-        sizeof(uint8_t) * num_rows);
-    col_buffer[idx] = reinterpret_cast<int8_t*>(column);
-  } else {
-    auto childVal = child->asFlatVector<T>();
-    auto* rawValues = childVal->mutableRawValues();
-    T* column = (T*)std::malloc(sizeof(T) * num_rows);
-    if (child->mayHaveNulls()) {
-      auto nulls = child->rawNulls();
-      for (auto pos = 0; pos < num_rows; pos++) {
-        if (bits::isBitNull(nulls, pos)) {
-          if (std::is_integral<T>::value) {
-            rawValues[pos] = inline_int_null_value<T>();
-          } else if (std::is_same<T, float>::value) {
-            rawValues[pos] = FLT_MIN;
-          } else if (std::is_same<T, double>::value) {
-            rawValues[pos] = DBL_MIN;
-          } else {
-            VELOX_NYI("Conversion is not supported yet");
-          }
+      if (bits::isBitNull(nulls, pos)) {
+        if (std::is_integral<T>::value) {
+          rawValues[pos] = inline_int_null_value<T>();
+        } else if (std::is_same<T, float>::value) {
+          rawValues[pos] = FLT_MIN;
+        } else if (std::is_same<T, double>::value) {
+          rawValues[pos] = DBL_MIN;
+        } else {
+          VELOX_NYI("Conversion is not supported yet");
         }
       }
     }
-    memcpy(column, rawValues, sizeof(T) * num_rows);
-    col_buffer[idx] = reinterpret_cast<int8_t*>(column);
   }
+  memcpy(column, rawValues, sizeof(T) * num_rows);
+  col_buffer[idx] = reinterpret_cast<int8_t*>(column);
+}
+
+template <>
+void toCiderImpl<TypeKind::BOOLEAN>(
+    VectorPtr& child,
+    int idx,
+    int8_t*** col_buffer_ptr,
+    int num_rows) {
+  int8_t** col_buffer = *col_buffer_ptr;
+  auto childVal = child->asFlatVector<bool>();
+  uint64_t* rawValues = childVal->mutableRawValues<uint64_t>();
+  int8_t* column = (int8_t*)std::malloc(sizeof(int8_t) * num_rows);
+  auto nulls = child->rawNulls();
+  for (auto pos = 0; pos < num_rows; pos++) {
+    if (child->mayHaveNulls() && bits::isBitNull(nulls, pos)) {
+      column[pos] = inline_int_null_value<int8_t>();
+    } else {
+      column[pos] = bits::isBitSet(rawValues, pos) ? true : false;
+    }
+  }
+  col_buffer[idx] = column;
 }
 
 template <>
@@ -183,27 +183,42 @@ VectorPtr toVeloxImpl(
   auto result = BaseVector::create(vType, num_rows, pool);
   auto flatResult = result->as<FlatVector<T>>();
   auto rawValues = flatResult->mutableRawValues();
-  T* dataBuffer = reinterpret_cast<T*>(data_buffer);
-  memcpy(rawValues, dataBuffer, num_rows * sizeof(T));
+  T* srcValues = reinterpret_cast<T*>(data_buffer);
+  memcpy(rawValues, srcValues, num_rows * sizeof(T));
   for (auto pos = 0; pos < num_rows; pos++) {
-    if (std::is_same<T, bool>::value) {
-      if ((int8_t)dataBuffer[pos] == inline_int_null_value<int8_t>()) {
-        result->setNull(pos, true);
-      }
-    } else if (std::is_integral<T>::value) {
-      if (dataBuffer[pos] == inline_int_null_value<T>()) {
+    if (std::is_integral<T>::value) {
+      if (srcValues[pos] == inline_int_null_value<T>()) {
         result->setNull(pos, true);
       }
     } else if (std::is_same<T, float>::value) {
-      if (dataBuffer[pos] == FLT_MIN) {
+      if (srcValues[pos] == FLT_MIN) {
         result->setNull(pos, true);
       }
     } else if (std::is_same<T, double>::value) {
-      if (dataBuffer[pos] == DBL_MIN) {
+      if (srcValues[pos] == DBL_MIN) {
         result->setNull(pos, true);
       }
     } else {
       VELOX_NYI("Conversion is not supported yet");
+    }
+  }
+  return result;
+}
+
+template <>
+VectorPtr toVeloxImpl<TypeKind::BOOLEAN>(
+    const TypePtr& vType,
+    int8_t* data_buffer,
+    int num_rows,
+    memory::MemoryPool* pool) {
+  auto result = BaseVector::create(vType, num_rows, pool);
+  auto flatResult = result->as<FlatVector<bool>>();
+  auto rawValues = flatResult->mutableRawValues<uint64_t>();
+  for (auto pos = 0; pos < num_rows; pos++) {
+    if (data_buffer[pos] == inline_int_null_value<int8_t>()) {
+      result->setNull(pos, true);
+    } else {
+      bits::setBit(rawValues, pos, static_cast<bool>(data_buffer[pos]));
     }
   }
   return result;
@@ -244,13 +259,13 @@ VectorPtr toVeloxImplTS(
   auto result = BaseVector::create(vType, num_rows, pool);
   auto flatResult = result->as<FlatVector<Timestamp>>();
   auto rawValues = flatResult->mutableRawValues();
-  int64_t* dataBuffer = reinterpret_cast<int64_t*>(data_buffer);
+  int64_t* srcValues = reinterpret_cast<int64_t*>(data_buffer);
   for (auto pos = 0; pos < num_rows; pos++) {
-    if (dataBuffer[pos] == std::numeric_limits<int64_t>::min()) {
+    if (srcValues[pos] == std::numeric_limits<int64_t>::min()) {
       result->setNull(pos, true);
     } else {
-      auto microseconds = dataBuffer[pos];
-      // TODO: need to check precision
+      auto microseconds = srcValues[pos];
+      // TODO: need to get precision info from omnisci
       flatResult->set(
           pos,
           Timestamp(microseconds / 1000000, (microseconds % 1000000) * 1000));

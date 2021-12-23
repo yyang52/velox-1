@@ -78,9 +78,10 @@ TEST_F(ResultConvertTest, VeloxToCiderDirectConvert) {
   int32_t* col_0 = reinterpret_cast<int32_t*>(colBuffer[0]);
   int64_t* col_1 = reinterpret_cast<int64_t*>(colBuffer[1]);
   double* col_2 = reinterpret_cast<double*>(colBuffer[2]);
-  uint8_t* col_3 = reinterpret_cast<uint8_t*>(colBuffer[3]);
+  // uint8_t* col_3 = reinterpret_cast<uint8_t*>(colBuffer[3]);
   // int8_t* col_3 = reinterpret_cast<int8_t*>(colBuffer[3]);
-  // uint64_t* col_3 = reinterpret_cast<uint64_t*>(colBuffer[3]);
+  // uint64_t* col_3_tmp = reinterpret_cast<uint64_t*>(colBuffer[3]);
+  int8_t* col_3 = colBuffer[3];
   for (auto idx = 0; idx < numRows; idx++) {
     if (data_0[idx] == std::nullopt) {
       EXPECT_EQ(inline_int_null_value<int32_t>(), col_0[idx]);
@@ -107,7 +108,7 @@ TEST_F(ResultConvertTest, VeloxToCiderDirectConvert) {
     if (data_3[idx] == std::nullopt) {
       EXPECT_EQ(inline_int_null_value<int8_t>(), col_3[idx]);
     } else {
-      EXPECT_EQ(data_3[idx].value(), (bool)col_3[idx]);
+      EXPECT_EQ(data_3[idx].value(), static_cast<bool>(col_3[idx]));
     }
   }
 }
@@ -125,12 +126,12 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
   std::shared_ptr<DataConvertor> convertor =
       DataConvertor::create(CONVERT_TYPE::DIRECT);
   int num_rows = 10;
-  int8_t** col_buffer = (int8_t**)std::malloc(sizeof(int8_t*) * 3);
+  int8_t** col_buffer = (int8_t**)std::malloc(sizeof(int8_t*) * 4);
 
   int32_t* col_0 = (int32_t*)std::malloc(sizeof(int32_t) * 10);
   int64_t* col_1 = (int64_t*)std::malloc(sizeof(int64_t) * 10);
   double* col_2 = (double*)std::malloc(sizeof(double) * 10);
-  bool* col_3 = (bool*)std::malloc(sizeof(bool) * 10);
+  int8_t* col_3 = (int8_t*)std::malloc(sizeof(int8_t) * 10);
 
   for (int i = 0; i < num_rows; i++) {
     col_0[i] = i;
@@ -149,7 +150,7 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
   col_buffer[0] = reinterpret_cast<int8_t*>(col_0);
   col_buffer[1] = reinterpret_cast<int8_t*>(col_1);
   col_buffer[2] = reinterpret_cast<int8_t*>(col_2);
-  col_buffer[3] = reinterpret_cast<int8_t*>(col_3);
+  col_buffer[3] = col_3;
 
   std::vector<std::string> col_names = {"col_0", "col_1", "col_2", "col_3"};
   std::vector<std::string> col_types = {"INT", "BIGINT", "DOUBLE", "BOOL"};
@@ -164,7 +165,7 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
   auto* rawValues_0 = childVal_0->mutableRawValues();
   auto nulls_0 = child_0->rawNulls();
   for (auto idx = 0; idx < num_rows; idx++) {
-    if (rawValues_0[idx] == inline_int_null_value<int32_t>()) {
+    if (col_0[idx] == inline_int_null_value<int32_t>()) {
       EXPECT_TRUE(bits::isBitNull(nulls_0, idx));
     } else {
       EXPECT_EQ(rawValues_0[idx], col_0[idx]);
@@ -176,7 +177,7 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
   auto* rawValues_1 = childVal_1->mutableRawValues();
   auto nulls_1 = child_1->rawNulls();
   for (auto idx = 0; idx < num_rows; idx++) {
-    if (rawValues_1[idx] == inline_int_null_value<int64_t>()) {
+    if (col_1[idx] == inline_int_null_value<int64_t>()) {
       EXPECT_TRUE(bits::isBitNull(nulls_1, idx));
     } else {
       EXPECT_EQ(rawValues_1[idx], col_1[idx]);
@@ -188,7 +189,7 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
   auto* rawValues_2 = childVal_2->mutableRawValues();
   auto nulls_2 = child_2->rawNulls();
   for (auto idx = 0; idx < num_rows; idx++) {
-    if (rawValues_2[idx] == DBL_MIN) {
+    if (col_2[idx] == DBL_MIN) {
       EXPECT_TRUE(bits::isBitNull(nulls_2, idx));
     } else {
       EXPECT_EQ(rawValues_2[idx], col_2[idx]);
@@ -196,14 +197,14 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
   }
   VectorPtr& child_3 = rowVector->childAt(3);
   EXPECT_TRUE(child_3->mayHaveNulls());
-  auto childVal_3 = child_3->asFlatVector<int8_t>();
+  auto childVal_3 = child_3->asFlatVector<bool>();
   auto* rawValues_3 = childVal_3->mutableRawValues();
   auto nulls_3 = child_3->rawNulls();
   for (auto idx = 0; idx < num_rows; idx++) {
-    if (rawValues_3[idx] == inline_int_null_value<int8_t>()) {
+    if (col_3[idx] == inline_int_null_value<int8_t>()) {
       EXPECT_TRUE(bits::isBitNull(nulls_3, idx));
     } else {
-      EXPECT_EQ((bool)rawValues_3[idx], col_3[idx]);
+      EXPECT_EQ(childVal_3->valueAt(idx), col_3[idx]);
     }
   }
   // release buffer
@@ -212,7 +213,6 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
   std::free(col_buffer[2]);
   std::free(col_buffer[3]);
   std::free(col_buffer);
-  std::cout << "214" << std::endl;
 }
 
 TEST_F(ResultConvertTest, CiderToVeloxArrowConvert) {
