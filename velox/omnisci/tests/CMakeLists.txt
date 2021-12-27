@@ -18,5 +18,4 @@ target_link_libraries(
   velox_vector_test_lib
   data_convert
   ${GTEST_BOTH_LIBRARIES}
-  ${gflags_LIBRARIES}
 )

@@ -15,130 +15,117 @@
 #include "velox/vector/FlatVector.h"
 
 namespace facebook::velox::omnisci {
-// implement type by type (could be refined as template)
-void convert(
+
+template <TypeKind kind>
+void toCiderImpl(
+    VectorPtr& child,
+    int idx,
+    int8_t*** col_buffer_ptr,
+    int num_rows) {
+  using T = typename TypeTraits<kind>::NativeType;
+  int8_t** col_buffer = *col_buffer_ptr;
+  auto childVal = child->asFlatVector<T>();
+  auto* rawValues = childVal->mutableRawValues();
+  T* column = (T*)std::malloc(sizeof(T) * num_rows);
+  if (child->mayHaveNulls()) {
+    auto nulls = child->rawNulls();
+    for (auto pos = 0; pos < num_rows; pos++) {
+      if (bits::isBitNull(nulls, pos)) {
+        if (std::is_integral<T>::value) {
+          rawValues[pos] = inline_int_null_value<T>();
+        } else if (std::is_same<T, float>::value) {
+          rawValues[pos] = FLT_MIN;
+        } else if (std::is_same<T, double>::value) {
+          rawValues[pos] = DBL_MIN;
+        } else {
+          VELOX_NYI("Conversion is not supported yet");
+        }
+      }
+    }
+  }
+  memcpy(column, rawValues, sizeof(T) * num_rows);
+  col_buffer[idx] = reinterpret_cast<int8_t*>(column);
+}
+
+template <>
+void toCiderImpl<TypeKind::BOOLEAN>(
     VectorPtr& child,
     int idx,
     int8_t*** col_buffer_ptr,
     int num_rows) {
   int8_t** col_buffer = *col_buffer_ptr;
-  switch (child->typeKind()) {
-    case TypeKind::BOOLEAN: {
-      auto childVal = child->asFlatVector<bool>();
-      auto* rawValues = childVal->mutableRawValues();
-      bool* column = (bool*)std::malloc(sizeof(bool) * num_rows);
-      if (child->mayHaveNulls()) {
-        auto nulls = child->rawNulls();
-        for (auto pos = 0; pos < num_rows; pos++) {
-          if (bits::isBitNull(nulls, pos)) {
-            rawValues[pos] = std::numeric_limits<bool>::min() + 1;
-          }
-        }
-      }
-      memcpy(column, rawValues, sizeof(bool) * num_rows);
-      col_buffer[idx] = reinterpret_cast<int8_t*>(column);
-      break;
+  auto childVal = child->asFlatVector<bool>();
+  uint64_t* rawValues = childVal->mutableRawValues<uint64_t>();
+  int8_t* column = (int8_t*)std::malloc(sizeof(int8_t) * num_rows);
+  auto nulls = child->rawNulls();
+  for (auto pos = 0; pos < num_rows; pos++) {
+    if (child->mayHaveNulls() && bits::isBitNull(nulls, pos)) {
+      column[pos] = inline_int_null_value<int8_t>();
+    } else {
+      column[pos] = bits::isBitSet(rawValues, pos) ? true : false;
     }
-    case TypeKind::TINYINT: {
-      int8_t* column = (int8_t*)std::malloc(sizeof(int8_t) * num_rows);
-      auto childVal = child->asFlatVector<int8_t>();
-      auto* rawValues = childVal->mutableRawValues();
-      if (child->mayHaveNulls()) {
-        auto nulls = child->rawNulls();
-        for (auto pos = 0; pos < num_rows; pos++) {
-          if (bits::isBitNull(nulls, pos)) {
-            rawValues[pos] = std::numeric_limits<int8_t>::min() + 1;
-          }
-        }
-      }
-      memcpy(column, rawValues, sizeof(int8_t) * num_rows);
-      col_buffer[idx] = reinterpret_cast<int8_t*>(column);
-      break;
-    }
-    case TypeKind::SMALLINT: {
-      int16_t* column = (int16_t*)std::malloc(sizeof(int16_t) * num_rows);
-      auto childVal = child->asFlatVector<int16_t>();
-      auto* rawValues = childVal->mutableRawValues();
-      if (childVal->mayHaveNulls()) {
-        auto nulls = child->rawNulls();
-        for (auto pos = 0; pos < num_rows; pos++) {
-          if (bits::isBitNull(nulls, pos)) {
-            rawValues[pos] = std::numeric_limits<int16_t>::min() + 1;
-          }
-        }
-      }
-      memcpy(column, rawValues, sizeof(int16_t) * num_rows);
-      col_buffer[idx] = reinterpret_cast<int8_t*>(column);
-      break;
-    }
-    case TypeKind::INTEGER: {
-      int32_t* column = (int32_t*)std::malloc(sizeof(int32_t) * num_rows);
-      auto childVal = child->asFlatVector<int32_t>();
-      auto* rawValues = childVal->mutableRawValues();
-      if (child->mayHaveNulls()) {
-        auto nulls = child->rawNulls();
-        for (auto pos = 0; pos < num_rows; pos++) {
-          if (bits::isBitNull(nulls, pos)) {
-            rawValues[pos] = std::numeric_limits<int32_t>::min() + 1;
-          }
-        }
-      }
-      memcpy(column, rawValues, sizeof(int32_t) * num_rows);
-      col_buffer[idx] = reinterpret_cast<int8_t*>(column);
-      break;
-    }
-    case TypeKind::BIGINT: {
-      int64_t* column = (int64_t*)std::malloc(sizeof(int64_t) * num_rows);
-      auto childVal = child->asFlatVector<int64_t>();
-      auto* rawValues = childVal->mutableRawValues();
-      if (child->mayHaveNulls()) {
-        auto nulls = child->rawNulls();
-        for (auto pos = 0; pos < num_rows; pos++) {
-          if (bits::isBitNull(nulls, pos)) {
-            rawValues[pos] = std::numeric_limits<int64_t>::min() + 1;
-          }
-        }
-      }
-      memcpy(column, rawValues, sizeof(int64_t) * num_rows);
-      col_buffer[idx] = reinterpret_cast<int8_t*>(column);
-      break;
-    }
-    case TypeKind::REAL: {
-      float* column = (float*)std::malloc(sizeof(float) * num_rows);
-      auto childVal = child->asFlatVector<float>();
-      auto* rawValues = childVal->mutableRawValues();
-      if (child->mayHaveNulls()) {
-        auto nulls = childVal->rawNulls();
-        for (auto pos = 0; pos < num_rows; pos++) {
-          if (bits::isBitNull(nulls, pos)) {
-            rawValues[pos] = std::numeric_limits<float>::min() + 1;
-          }
-        }
-      }
-      memcpy(column, rawValues, sizeof(float) * num_rows);
-      col_buffer[idx] = reinterpret_cast<int8_t*>(column);
-      break;
-    }
-    case TypeKind::DOUBLE: {
-      double* column = (double*)std::malloc(sizeof(double) * num_rows);
-      auto childVal = child->asFlatVector<double>();
-      auto* rawValues = childVal->mutableRawValues();
-      if (child->mayHaveNulls()) {
-        auto nulls = childVal->rawNulls();
-        for (auto pos = 0; pos < num_rows; pos++) {
-          if (bits::isBitNull(nulls, pos)) {
-            rawValues[pos] = std::numeric_limits<double>::min() + 1;
-          }
-        }
-      }
-      memcpy(column, rawValues, sizeof(double) * num_rows);
-      col_buffer[idx] = reinterpret_cast<int8_t*>(column);
-      break;
-    }
-    default:
-      VELOX_NYI(" {}: conversion is not supported yet", child->typeKind());
-      break;
   }
+  col_buffer[idx] = column;
+}
+
+template <>
+void toCiderImpl<TypeKind::VARCHAR>(
+    VectorPtr& child,
+    int idx,
+    int8_t*** col_buffer_ptr,
+    int num_rows) {
+  int8_t** col_buffer = *col_buffer_ptr;
+  size_t string_length = 0;
+  auto childVal = child->asFlatVector<StringView>();
+  auto* rawValues = childVal->mutableRawValues();
+  auto nulls = child->rawNulls();
+  for (auto i = 0; i < num_rows; i++) {
+    if (child->mayHaveNulls() && bits::isBitNull(nulls, i)) {
+      continue;
+    }
+    string_length += rawValues[i].size();
+  }
+  int8_t* column = (int8_t*)std::malloc(sizeof(int8_t) * string_length);
+  int8_t* p = column;
+  size_t current_offset = 0;
+  for (auto i = 0; i < num_rows; i++) {
+    if (child->mayHaveNulls() && bits::isBitNull(nulls, i)) {
+      continue;
+    }
+    memcpy(
+        (void*)(column + current_offset),
+        rawValues[i].data(),
+        rawValues[i].size());
+    current_offset += rawValues[i].size();
+  }
+  col_buffer[idx] = column;
+}
+
+template <>
+void toCiderImpl<TypeKind::VARBINARY>(
+    VectorPtr& child,
+    int idx,
+    int8_t*** col_buffer_ptr,
+    int num_rows) {
+  VELOX_NYI(" {} conversion is not supported yet");
+}
+
+template <>
+void toCiderImpl<TypeKind::TIMESTAMP>(
+    VectorPtr& child,
+    int idx,
+    int8_t*** col_buffer_ptr,
+    int num_rows) {
+  VELOX_NYI(" {} conversion is not supported yet");
+}
+
+void toCiderResult(
+    VectorPtr& child,
+    int idx,
+    int8_t*** col_buffer_ptr,
+    int num_rows) {
+  return VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH(
+      toCiderImpl, child->typeKind(), child, idx, col_buffer_ptr, num_rows);
 }
 
 CiderResultSet RawDataConvertor::convertToCider(
@@ -153,7 +140,7 @@ CiderResultSet RawDataConvertor::convertToCider(
     VectorPtr& child = rowVector->childAt(idx);
     switch (child->encoding()) {
       case VectorEncoding::Simple::FLAT:
-        convert(child, idx, col_buffer_ptr, num_rows);
+        toCiderResult(child, idx, col_buffer_ptr, num_rows);
         break;
       default:
         VELOX_NYI(" {} conversion is not supported yet", child->encoding());
@@ -163,126 +150,137 @@ CiderResultSet RawDataConvertor::convertToCider(
 };
 
 TypePtr getVeloxType(std::string typeName) {
-  if (typeName == "BOOLEAN")
+  if (typeName == "BOOL")
     return BOOLEAN();
   if (typeName == "TINYINT")
     return TINYINT();
   if (typeName == "SMALLINT")
     return SMALLINT();
-  if (typeName == "INTEGER")
+  if (typeName == "INT")
     return INTEGER();
-  if (typeName == "BIGINT")
+  if (typeName == "BIGINT" || typeName == "DECIMAL")
     return BIGINT();
   if (typeName == "FLOAT")
     return REAL();
   if (typeName == "DOUBLE")
     return DOUBLE();
-  else {
-    VELOX_NYI(" {} conversion is not supported yet", typeName);
+  if (typeName == "VARCHAR") {
+    return VARCHAR();
   }
+  if (typeName == "TIMESTAMP")
+    return TIMESTAMP();
+  else
+    VELOX_NYI(" {} conversion is not supported yet", typeName);
 }
 
-VectorPtr convertColumn(
+template <TypeKind kind>
+VectorPtr toVeloxImpl(
     const TypePtr& vType,
     int8_t* data_buffer,
     int num_rows,
     memory::MemoryPool* pool) {
-  switch (vType->kind()) {
-    case TypeKind::BOOLEAN: {
-      auto result = BaseVector::create(vType, num_rows, pool);
-      auto flatResult = result->as<FlatVector<bool>>();
-      auto rawValues = flatResult->mutableRawValues();
-      bool* dataBuffer = reinterpret_cast<bool*>(data_buffer);
-      memcpy(rawValues, dataBuffer, num_rows * sizeof(bool));
-      for (auto pos = 0; pos < num_rows; pos++) {
-        if (dataBuffer[pos] == std::numeric_limits<bool>::min() + 1) {
-          result->setNull(pos, true);
-        }
+  using T = typename TypeTraits<kind>::NativeType;
+  auto result = BaseVector::create(vType, num_rows, pool);
+  auto flatResult = result->as<FlatVector<T>>();
+  auto rawValues = flatResult->mutableRawValues();
+  T* srcValues = reinterpret_cast<T*>(data_buffer);
+  memcpy(rawValues, srcValues, num_rows * sizeof(T));
+  for (auto pos = 0; pos < num_rows; pos++) {
+    if (std::is_integral<T>::value) {
+      if (srcValues[pos] == inline_int_null_value<T>()) {
+        result->setNull(pos, true);
       }
-      return result;
-    }
-    case TypeKind::TINYINT: {
-      auto result = BaseVector::create(vType, num_rows, pool);
-      auto flatResult = result->as<FlatVector<int8_t>>();
-      auto rawValues = flatResult->mutableRawValues();
-      int8_t* dataBuffer = reinterpret_cast<int8_t*>(data_buffer);
-      memcpy(rawValues, dataBuffer, num_rows * sizeof(int8_t));
-      for (auto pos = 0; pos < num_rows; pos++) {
-        if (dataBuffer[pos] == std::numeric_limits<int8_t>::min() + 1) {
-          result->setNull(pos, true);
-        }
+    } else if (std::is_same<T, float>::value) {
+      if (srcValues[pos] == FLT_MIN) {
+        result->setNull(pos, true);
       }
-      return result;
-    }
-    case TypeKind::SMALLINT: {
-      auto result = BaseVector::create(vType, num_rows, pool);
-      auto flatResult = result->as<FlatVector<int16_t>>();
-      auto rawValues = flatResult->mutableRawValues();
-      int16_t* dataBuffer = reinterpret_cast<int16_t*>(data_buffer);
-      memcpy(rawValues, dataBuffer, num_rows * sizeof(int16_t));
-      for (auto pos = 0; pos < num_rows; pos++) {
-        if (dataBuffer[pos] == std::numeric_limits<int16_t>::min() + 1) {
-          result->setNull(pos, true);
-        }
+    } else if (std::is_same<T, double>::value) {
+      if (srcValues[pos] == DBL_MIN) {
+        result->setNull(pos, true);
       }
-      return result;
+    } else {
+      VELOX_NYI("Conversion is not supported yet");
     }
-    case TypeKind::INTEGER: {
-      auto result = BaseVector::create(vType, num_rows, pool);
-      auto flatResult = result->as<FlatVector<int32_t>>();
-      auto rawValues = flatResult->mutableRawValues();
-      int32_t* dataBuffer = reinterpret_cast<int32_t*>(data_buffer);
-      memcpy(rawValues, dataBuffer, num_rows * sizeof(int32_t));
-      for (auto pos = 0; pos < num_rows; pos++) {
-        if (dataBuffer[pos] == std::numeric_limits<int32_t>::min() + 1) {
-          result->setNull(pos, true);
-        }
-      }
-      return result;
-    }
-    case TypeKind::BIGINT: {
-      auto result = BaseVector::create(vType, num_rows, pool);
-      auto flatResult = result->as<FlatVector<int64_t>>();
-      auto rawValues = flatResult->mutableRawValues();
-      int64_t* dataBuffer = reinterpret_cast<int64_t*>(data_buffer);
-      memcpy(rawValues, dataBuffer, num_rows * sizeof(int64_t));
-      for (auto pos = 0; pos < num_rows; pos++) {
-        if (dataBuffer[pos] == std::numeric_limits<int64_t>::min() + 1) {
-          result->setNull(pos, true);
-        }
-      }
-      return result;
-    }
-    case TypeKind::REAL: {
-      auto result = BaseVector::create(vType, num_rows, pool);
-      auto flatResult = result->as<FlatVector<float>>();
-      auto rawValues = flatResult->mutableRawValues();
-      float* dataBuffer = reinterpret_cast<float*>(data_buffer);
-      memcpy(rawValues, dataBuffer, num_rows * sizeof(float));
-      for (auto pos = 0; pos < num_rows; pos++) {
-        if (dataBuffer[pos] == std::numeric_limits<float>::min() + 1) {
-          result->setNull(pos, true);
-        }
-      }
-      return result;
-    }
-    case TypeKind::DOUBLE: {
-      auto result = BaseVector::create(vType, num_rows, pool);
-      auto flatResult = result->as<FlatVector<double>>();
-      auto rawValues = flatResult->mutableRawValues();
-      double* dataBuffer = reinterpret_cast<double*>(data_buffer);
-      memcpy(rawValues, dataBuffer, num_rows * sizeof(double));
-      for (auto pos = 0; pos < num_rows; pos++) {
-        if (dataBuffer[pos] == std::numeric_limits<double>::min() + 1) {
-          result->setNull(pos, true);
-        }
-      }
-      return result;
-    }
-    default:
-      VELOX_NYI(" {} conversion is not supported yet", vType->kind());
-      break;
   }
+  return result;
+}
+
+template <>
+VectorPtr toVeloxImpl<TypeKind::BOOLEAN>(
+    const TypePtr& vType,
+    int8_t* data_buffer,
+    int num_rows,
+    memory::MemoryPool* pool) {
+  auto result = BaseVector::create(vType, num_rows, pool);
+  auto flatResult = result->as<FlatVector<bool>>();
+  auto rawValues = flatResult->mutableRawValues<uint64_t>();
+  for (auto pos = 0; pos < num_rows; pos++) {
+    if (data_buffer[pos] == inline_int_null_value<int8_t>()) {
+      result->setNull(pos, true);
+    } else {
+      bits::setBit(rawValues, pos, static_cast<bool>(data_buffer[pos]));
+    }
+  }
+  return result;
+}
+
+template <>
+VectorPtr toVeloxImpl<TypeKind::VARCHAR>(
+    const TypePtr& vType,
+    int8_t* data_buffer,
+    int num_rows,
+    memory::MemoryPool* pool) {
+  VELOX_NYI(" {} conversion is not supported yet");
+}
+
+template <>
+VectorPtr toVeloxImpl<TypeKind::VARBINARY>(
+    const TypePtr& vType,
+    int8_t* data_buffer,
+    int num_rows,
+    memory::MemoryPool* pool) {
+  VELOX_NYI(" {} conversion is not supported yet");
+}
+
+template <>
+VectorPtr toVeloxImpl<TypeKind::TIMESTAMP>(
+    const TypePtr& vType,
+    int8_t* data_buffer,
+    int num_rows,
+    memory::MemoryPool* pool) {
+  VELOX_NYI(" {} conversion is not supported yet");
+}
+
+VectorPtr toVeloxImplTS(
+    const TypePtr& vType,
+    int8_t* data_buffer,
+    int num_rows,
+    memory::MemoryPool* pool) {
+  auto result = BaseVector::create(vType, num_rows, pool);
+  auto flatResult = result->as<FlatVector<Timestamp>>();
+  auto rawValues = flatResult->mutableRawValues();
+  int64_t* srcValues = reinterpret_cast<int64_t*>(data_buffer);
+  for (auto pos = 0; pos < num_rows; pos++) {
+    if (srcValues[pos] == std::numeric_limits<int64_t>::min()) {
+      result->setNull(pos, true);
+    } else {
+      auto microseconds = srcValues[pos];
+      // TODO: need to get precision info from omnisci
+      flatResult->set(
+          pos,
+          Timestamp(microseconds / 1000000, (microseconds % 1000000) * 1000));
+    }
+  }
+  return result;
+}
+
+VectorPtr toVeloxVector(
+    const TypePtr& vType,
+    int8_t* data_buffer,
+    int num_rows,
+    memory::MemoryPool* pool) {
+  return VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH(
+      toVeloxImpl, vType->kind(), vType, data_buffer, num_rows, pool);
 }
 
 RowVectorPtr RawDataConvertor::convertToRowVector(
@@ -295,6 +293,7 @@ RowVectorPtr RawDataConvertor::convertToRowVector(
   std::vector<VectorPtr> columns;
 
   // get row type from cider result
+  // TODO: may need to pass SQLTypeInfo from cider
   std::vector<TypePtr> types;
   int num_cols = col_types.size();
   types.reserve(num_cols);
@@ -305,7 +304,7 @@ RowVectorPtr RawDataConvertor::convertToRowVector(
   // convert col buffer to vector ptr
   columns.reserve(num_cols);
   for (int i = 0; i < num_cols; i++) {
-    columns.push_back(convertColumn(types[i], col_buffer[i], num_rows, pool));
+    columns.push_back(toVeloxVector(types[i], col_buffer[i], num_rows, pool));
   }
   rowType = std::make_shared<RowType>(move(col_names), move(types));
   return std::make_shared<RowVector>(
