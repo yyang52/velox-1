@@ -25,7 +25,7 @@
 #include "velox/vector/ComplexVector.h"
 
 using namespace facebook::velox;
-namespace facebook::velox::omnisci {
+namespace facebook::velox::cider {
 enum CONVERT_TYPE { ARROW, DIRECT };
 
 struct CiderResultSet {
@@ -51,4 +51,4 @@ class DataConvertor {
       int num_rows,
       memory::MemoryPool* pool) = 0;
 };
-} // namespace facebook::velox::omnisci
+} // namespace facebook::velox::cider

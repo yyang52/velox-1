@@ -14,7 +14,7 @@
 #include "velox/omnisci/RawDataConvertor.h"
 #include "velox/vector/FlatVector.h"
 
-namespace facebook::velox::omnisci {
+namespace facebook::velox::cider {
 
 template <TypeKind kind>
 void toCiderImpl(
@@ -310,4 +310,4 @@ RowVectorPtr RawDataConvertor::convertToRowVector(
   return std::make_shared<RowVector>(
       pool, rowType, BufferPtr(nullptr), num_rows, columns);
 };
-} // namespace facebook::velox::omnisci
+} // namespace facebook::velox::cider

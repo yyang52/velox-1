@@ -28,7 +28,7 @@
 #include "QueryEngine/InputMetadata.h"
 #include "QueryEngine/RelAlgExecutionUnit.h"
 
-using namespace facebook::velox::omnisci;
+using namespace facebook::velox::cider;
 
 namespace facebook::velox::exec {
 class HybridExecOperator : public Operator {

@@ -21,8 +21,8 @@
 
 using namespace facebook::velox;
 using facebook::velox::test::VectorMaker;
-using namespace facebook::velox::omnisci;
-using facebook::velox::omnisci::DataConvertor;
+using namespace facebook::velox::cider;
+using facebook::velox::cider::DataConvertor;
 
 class ResultConvertTest : public testing::Test {
  protected:

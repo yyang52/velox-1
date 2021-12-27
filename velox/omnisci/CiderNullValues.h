@@ -25,6 +25,7 @@
 #define CONSTEXPR constexpr
 
 using namespace facebook::velox;
+namespace facebook::velox::cider {
 template <class T>
 constexpr inline int64_t inline_int_null_value() {
   return std::is_signed<T>::value ? std::numeric_limits<T>::min()
@@ -73,3 +74,4 @@ inline double inline_fp_null_val(const TypePtr& vType) {
       VELOX_UNSUPPORTED("Unsupported type: {}", vType->kind());
   }
 }
+} // namespace facebook::velox::cider

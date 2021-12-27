@@ -19,7 +19,7 @@
 
 #include "velox/omnisci/DataConvertor.h"
 
-namespace facebook::velox::omnisci {
+namespace facebook::velox::cider {
 class ArrowDataConvertor : public DataConvertor {
  public:
   ArrowDataConvertor() {}
@@ -33,4 +33,4 @@ class ArrowDataConvertor : public DataConvertor {
       int num_rows,
       memory::MemoryPool* pool) override;
 };
-} // namespace facebook::velox::omnisci
+} // namespace facebook::velox::cider
