@@ -60,7 +60,8 @@ target_link_libraries(
   velox_time
   velox_codegen
   velox_common_base
-  cider)
+  cider
+  data_convert)
 
 if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)

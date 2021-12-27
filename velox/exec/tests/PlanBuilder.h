@@ -50,8 +50,6 @@ class PlanBuilder {
 
   PlanBuilder& filter(const std::string& filter);
 
-  PlanBuilder& hybrid(const std::string& hybrid);
-
   PlanBuilder& tableWrite(
       const std::vector<std::string>& columnNames,
       const std::shared_ptr<core::InsertTableHandle>& insertHandle,

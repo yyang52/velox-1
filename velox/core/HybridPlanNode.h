@@ -15,8 +15,9 @@
  */
 #pragma once
 
-#include "QueryEngine/RelAlgExecutionUnit.h"
 #include "velox/core/PlanNode.h"
+
+#include "QueryEngine/RelAlgExecutionUnit.h"
 
 namespace facebook::velox::core {
 /**
@@ -64,10 +65,7 @@ struct CiderParamContext {
       return {{}, SortAlgorithm::Default, 0, 0};
     } else {
       return {
-          orderByCollation_,
-          SortAlgorithm::SpeculativeTopN,
-          limit_,
-          offset_};
+          orderByCollation_, SortAlgorithm::SpeculativeTopN, limit_, offset_};
     }
   }
   std::shared_ptr<RelAlgExecutionUnit> getExeUnitBasedOnContext() {
@@ -82,7 +80,7 @@ struct CiderParamContext {
     for (auto it : groupByExprMap_) {
       groupByExprs.push_back(it.second);
     }
-    if (groupByExprs.size() == 0) {
+    if (!nodeProperty_.hasAgg) {
       std::shared_ptr<Analyzer::Expr> empty;
       groupByExprs.emplace_back(empty);
     }

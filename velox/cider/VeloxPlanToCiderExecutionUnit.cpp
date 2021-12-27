@@ -63,7 +63,7 @@ bool isSourceNode(const std::shared_ptr<const velox::core::PlanNode>& node) {
 
 } // namespace
 
-std::shared_ptr<velox::core::PlanNode>
+std::shared_ptr<const velox::core::PlanNode>
 CiderExecutionUnitGenerator::transformPlan(
     const std::shared_ptr<velox::core::PlanNode> planNode) {
   // For output node, keep it as it is and update its source
@@ -85,7 +85,12 @@ CiderExecutionUnitGenerator::transformPlan(
         transformPlanInternal(
             ciderParamContext, paritionedOutputNode->sources()[0]));
   }
-  throw std::runtime_error("Unsupported output node");
+  //FIXME: add this to handle plan nodes which are not ended with PartitionOutput
+  auto ciderParamContext = std::make_shared<CiderParamContext>(
+      planNode->outputType(), "0");
+  return transformPlanInternal(
+      ciderParamContext, planNode);
+//  throw std::runtime_error("Unsupported output node");
 }
 
 std::shared_ptr<const velox::core::PlanNode>

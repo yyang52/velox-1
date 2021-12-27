@@ -37,7 +37,7 @@ class CiderExecutionUnitGenerator {
    *   FIXME(Cheng): what if one node failed to be converted, do we still need
    * jump to source
    */
-  std::shared_ptr<velox::core::PlanNode> transformPlan(
+  std::shared_ptr<const velox::core::PlanNode> transformPlan(
       const std::shared_ptr<velox::core::PlanNode> planNode);
 
  private:
