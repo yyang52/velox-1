@@ -32,31 +32,52 @@ using facebook::velox::test::BatchMaker;
 
 class HybridExecOperatorTest : public OperatorTestBase {
  protected:
-  void assertQueryPlan(
+  void assertHybridQuery(
       const std::shared_ptr<core::PlanNode>& planNode,
       const std::string& duckDBSql) {
+    Operator::registerOperator(HybridExecOperator::planNodeTranslator);
     facebook::velox::cider::CiderExecutionUnitGenerator generator;
     auto hybridPlan = generator.transformPlan(planNode);
     // TODO: we should verify whether this hybridPlan is valid.
     assertQuery(hybridPlan, duckDBSql);
   }
 
+  // without null value
+  std::vector<RowVectorPtr> createIncreaseInputData() {
+    std::vector<RowVectorPtr> vectors;
+    int batchNum = 10;
+    int batchSize = 100;
+    for (int32_t i = 0; i < batchNum; ++i) {
+      auto vector = std::dynamic_pointer_cast<RowVector>(
+          BatchMaker::createIncreaseBatch(rowType_, batchSize, *pool_));
+      vectors.push_back(vector);
+    }
+    return std::move(vectors);
+  }
+
+  std::vector<RowVectorPtr> createRandomInputData() {
+    std::vector<RowVectorPtr> vectors;
+    int batchNum = 10;
+    int batchSize = 100;
+    for (int32_t i = 0; i < batchNum; ++i) {
+      auto vector = std::dynamic_pointer_cast<RowVector>(
+          BatchMaker::createBatch(rowType_, batchSize, *pool_));
+      vectors.push_back(vector);
+    }
+    return std::move(vectors);
+  }
+
   std::shared_ptr<const RowType> rowType_{
-      ROW({"c0", "c1", "c2", "c3", "c4"},
-          {INTEGER(), DOUBLE(), INTEGER(), INTEGER(), BIGINT()})};
+      ROW({"c0", "c1", "c2", "c3", "c4", "c5"},
+          {INTEGER(), DOUBLE(), INTEGER(), INTEGER(), BIGINT(), BIGINT()})};
 };
 
 // simple agg test
 
 TEST_F(HybridExecOperatorTest, sum_int) {
-  Operator::registerOperator(HybridExecOperator::planNodeTranslator);
-  std::vector<RowVectorPtr> vectors;
-  for (int32_t i = 0; i < 1; ++i) {
-    auto vector = std::dynamic_pointer_cast<RowVector>(
-        BatchMaker::createIncreaseBatch(rowType_, 100, *pool_));
-    vectors.push_back(vector);
-  }
+  auto vectors = createIncreaseInputData();
   createDuckDbTable(vectors);
+  std::string duckDbSql = "SELECT SUM(c0) from tmp where c2 < 50";
 
   auto plan =
       PlanBuilder()
@@ -64,23 +85,16 @@ TEST_F(HybridExecOperatorTest, sum_int) {
           .filter("(c2 < 50)")
           .aggregation(
               {}, {"sum(c0)"}, {}, core::AggregationNode::Step::kPartial, false)
-          //          .partitionedOutput({}, 1)
           .planNode();
 
-  std::cout << plan->toString() << std::endl;
-
-  assertQueryPlan(plan, "SELECT SUM(c0) from tmp where c2 < 50");
+  assertQuery(plan, duckDbSql);
+  assertHybridQuery(plan, duckDbSql);
 }
 
 TEST_F(HybridExecOperatorTest, sum_double) {
-  Operator::registerOperator(HybridExecOperator::planNodeTranslator);
-  std::vector<RowVectorPtr> vectors;
-  for (int32_t i = 0; i < 1; ++i) {
-    auto vector = std::dynamic_pointer_cast<RowVector>(
-        BatchMaker::createIncreaseBatch(rowType_, 100, *pool_));
-    vectors.push_back(vector);
-  }
+  auto vectors = createIncreaseInputData();
   createDuckDbTable(vectors);
+  std::string duckDbSql = "SELECT SUM(c1) from tmp where c2 < 1000";
 
   auto plan =
       PlanBuilder()
@@ -88,23 +102,16 @@ TEST_F(HybridExecOperatorTest, sum_double) {
           .filter("(c2 < 1000)")
           .aggregation(
               {}, {"sum(c1)"}, {}, core::AggregationNode::Step::kPartial, false)
-          //          .partitionedOutput({}, 1)
           .planNode();
 
-  std::cout << plan->toString() << std::endl;
-
-  assertQueryPlan(plan, "SELECT SUM(c1) from tmp where c2 < 1000");
+  assertQuery(plan, duckDbSql);
+  assertHybridQuery(plan, duckDbSql);
 }
 
 TEST_F(HybridExecOperatorTest, sum_bigint) {
-  Operator::registerOperator(HybridExecOperator::planNodeTranslator);
-  std::vector<RowVectorPtr> vectors;
-  for (int32_t i = 0; i < 1; ++i) {
-    auto vector = std::dynamic_pointer_cast<RowVector>(
-        BatchMaker::createIncreaseBatch(rowType_, 100, *pool_));
-    vectors.push_back(vector);
-  }
+  auto vectors = createIncreaseInputData();
   createDuckDbTable(vectors);
+  std::string duckDbSql = "SELECT SUM(c4) from tmp where c2 < 100";
 
   auto plan =
       PlanBuilder()
@@ -112,44 +119,34 @@ TEST_F(HybridExecOperatorTest, sum_bigint) {
           .filter("(c2 < 100)")
           .aggregation(
               {}, {"sum(c4)"}, {}, core::AggregationNode::Step::kPartial, false)
-          //          .partitionedOutput({}, 1)
           .planNode();
 
-  std::cout << plan->toString() << std::endl;
-
-  assertQueryPlan(plan, "SELECT SUM(c4) from tmp where c2 < 100");
+  assertQuery(plan, duckDbSql);
+  assertHybridQuery(plan, duckDbSql);
 }
 
 // agg + project test
 TEST_F(HybridExecOperatorTest, sum_int_product_double) {
-  Operator::registerOperator(HybridExecOperator::planNodeTranslator);
-  std::vector<RowVectorPtr> vectors;
-  for (int32_t i = 0; i < 1; ++i) {
-    auto vector = std::dynamic_pointer_cast<RowVector>(
-        BatchMaker::createIncreaseBatch(rowType_, 100, *pool_));
-    vectors.push_back(vector);
-  }
+  auto vectors = createIncreaseInputData();
   createDuckDbTable(vectors);
+  std::string duckDbSql = "SELECT SUM(c0 * c1) from tmp where c2 < 50";
 
   auto plan =
       PlanBuilder()
-      .values(vectors)
-      .filter("(c2 < 50)")
-      .project(
-          std::vector<std::string>{"c0 * c1"},
-          std::vector<std::string>{"e1"})
+          .values(vectors)
+          .filter("(c2 < 50)")
+          .project(
+              std::vector<std::string>{"c0 * c1"},
+              std::vector<std::string>{"e1"})
           .aggregation(
-              {}, {"sum(e1)"}, {}, core::AggregationNode::Step::kPartial,
-              false)
-              //          .partitionedOutput({}, 1)
-              .planNode();
-  //  std::cout<< plan->toString() <<std::endl;
-
-  assertQueryPlan(plan, "SELECT SUM(c0 * c1) from tmp where c2 < 50");
+              {}, {"sum(e1)"}, {}, core::AggregationNode::Step::kPartial, false)
+          .planNode();
+  assertQuery(plan, duckDbSql);
+  assertHybridQuery(plan, duckDbSql);
 }
 
-// Currently, int * int will cause some type issue, cause some check failed in omnisci.
-// TEST_F(HybridExecOperatorTest, sum_int_product_int) {
+// Currently, int * int will cause some type issue, cause some check failed in
+// omnisci. TEST_F(HybridExecOperatorTest, sum_int_product_int) {
 //   Operator::registerOperator(HybridExecOperator::planNodeTranslator);
 //   std::vector<RowVectorPtr> vectors;
 //   for (int32_t i = 0; i < 1; ++i) {
@@ -174,7 +171,56 @@ TEST_F(HybridExecOperatorTest, sum_int_product_double) {
 //
 //   std::cout << plan->toString() << std::endl;
 //
-//   assertQueryPlan(plan, "SELECT SUM(c0 * c3) from tmp where c2 < 50");
+//   assertHybridQuery(plan, "SELECT SUM(c0 * c3) from tmp where c2 < 50");
 // }
 
 // TODO: verify data nith Null value
+
+TEST_F(HybridExecOperatorTest, sum_int_null) {
+  auto vectors = createRandomInputData();
+  createDuckDbTable(vectors);
+  std::string duckDbSql = "SELECT SUM(c0) from tmp where c2 < 50";
+
+  auto plan =
+      PlanBuilder()
+          .values(vectors)
+          .filter("(c2 < 50)")
+          .aggregation(
+              {}, {"sum(c0)"}, {}, core::AggregationNode::Step::kPartial, false)
+          .planNode();
+  assertQuery(plan, duckDbSql);
+  assertHybridQuery(plan, duckDbSql);
+}
+
+TEST_F(HybridExecOperatorTest, sum_int_null_) {
+  auto vectors = createRandomInputData();
+  createDuckDbTable(vectors);
+  std::string duckDbSql = "SELECT SUM(c0) from tmp where c4 < 50";
+
+  auto plan =
+      PlanBuilder()
+          .values(vectors)
+          .filter("(c4 < 50)")
+          .aggregation(
+              {}, {"sum(c0)"}, {}, core::AggregationNode::Step::kPartial, false)
+          .planNode();
+  assertQuery(plan, duckDbSql);
+  assertHybridQuery(plan, duckDbSql);
+}
+
+// this test may fail due to duckDB overflow check issue.
+TEST_F(HybridExecOperatorTest, sum_long_null) {
+  auto vectors = createRandomInputData();
+  createDuckDbTable(vectors);
+  std::string duckDbSql = "SELECT SUM(c5) from tmp where c4 < 50";
+
+  auto plan =
+      PlanBuilder()
+          .values(vectors)
+          .filter("(c4 < 50)")
+          .aggregation(
+              {}, {"sum(c5)"}, {}, core::AggregationNode::Step::kPartial, false)
+          .planNode();
+  assertQuery(plan, duckDbSql);
+  assertHybridQuery(plan, duckDbSql);
+}

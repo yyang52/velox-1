@@ -206,7 +206,7 @@ std::shared_ptr<Analyzer::Expr> VeloxToCiderExprConverter::toCiderExpr(
   }
   auto colIndex = it->second;
   // TODO: how to determine isNullable? use true for now
-  auto colType = getCiderType(vExpr->type(), true);
+  auto colType = getCiderType(vExpr->type(), false);
   // TODO: fixed fake table id 100
   return std::make_shared<Analyzer::ColumnVar>(colType, 100, colIndex, 0);
 }
