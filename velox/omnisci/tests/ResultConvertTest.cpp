@@ -36,8 +36,8 @@ TEST_F(ResultConvertTest, VeloxToCiderDirectConvert) {
       DataConvertor::create(CONVERT_TYPE::DIRECT);
   int numRows = 10;
   auto rowType =
-      ROW({"col_0", "col_1", "col_2", "col_3"},
-          {INTEGER(), BIGINT(), DOUBLE(), BOOLEAN()});
+      ROW({"col_0", "col_1", "col_2", "col_3", "col_4"},
+          {INTEGER(), BIGINT(), DOUBLE(), BOOLEAN(), TIMESTAMP()});
 
   std::vector<std::optional<int32_t>> data_0 = {
       0, std::nullopt, 1, 3, std::nullopt, -1234, -99, -999, 1000, -1};
@@ -70,7 +70,20 @@ TEST_F(ResultConvertTest, VeloxToCiderDirectConvert) {
       true,
   };
   auto c_3 = vectorMaker_.flatVectorNullable<bool>(data_3);
-  auto rowVector = vectorMaker_.rowVector({c_0, c_1, c_2, c_3});
+  std::vector<std::optional<Timestamp>> data_4 = {
+      Timestamp(28800, 10),
+      Timestamp(946713600, 0),
+      Timestamp(0, 0),
+      std::nullopt,
+      Timestamp(946758116, 20),
+      Timestamp(-21600, 0),
+      std::nullopt,
+      Timestamp(957164400, 30),
+      Timestamp(946729316, 0),
+      Timestamp(7200, 0),
+  };
+  auto c_4 = vectorMaker_.flatVectorNullable<Timestamp>(data_4);
+  auto rowVector = vectorMaker_.rowVector({c_0, c_1, c_2, c_3, c_4});
   CiderResultSet crs = convertor->convertToCider(rowVector, numRows);
   EXPECT_EQ(10, crs.numRows);
 
@@ -79,6 +92,7 @@ TEST_F(ResultConvertTest, VeloxToCiderDirectConvert) {
   int64_t* col_1 = reinterpret_cast<int64_t*>(colBuffer[1]);
   double* col_2 = reinterpret_cast<double*>(colBuffer[2]);
   int8_t* col_3 = colBuffer[3];
+  int64_t* col_4 = reinterpret_cast<int64_t*>(colBuffer[4]);
 
   for (auto idx = 0; idx < numRows; idx++) {
     if (data_0[idx] == std::nullopt) {
@@ -101,12 +115,21 @@ TEST_F(ResultConvertTest, VeloxToCiderDirectConvert) {
       EXPECT_EQ(data_2[idx], col_2[idx]);
     }
   }
-
   for (auto idx = 0; idx < numRows; idx++) {
     if (data_3[idx] == std::nullopt) {
       EXPECT_EQ(inline_int_null_value<int8_t>(), col_3[idx]);
     } else {
       EXPECT_EQ(data_3[idx].value(), static_cast<bool>(col_3[idx]));
+    }
+  }
+  for (auto idx = 0; idx < numRows; idx++) {
+    if (data_4[idx] == std::nullopt) {
+      EXPECT_EQ(inline_int_null_value<int64_t>(), col_4[idx]);
+    } else {
+      EXPECT_EQ(
+          data_4[idx].value().getSeconds() * 1000000000 +
+              data_4[idx].value().getNanos(),
+          col_4[idx]);
     }
   }
 }

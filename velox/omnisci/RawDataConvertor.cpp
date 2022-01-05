@@ -110,13 +110,31 @@ void toCiderImpl<TypeKind::VARBINARY>(
   VELOX_NYI(" {} conversion is not supported yet");
 }
 
+static constexpr int64_t kNanoSecsPerSec = 1000000000;
+static constexpr int64_t kMicroSecsPerSec = 1000000;
+static constexpr int64_t kMilliSecsPerSec = 1000;
+
 template <>
 void toCiderImpl<TypeKind::TIMESTAMP>(
     VectorPtr& child,
     int idx,
     int8_t*** col_buffer_ptr,
     int num_rows) {
-  VELOX_NYI(" {} conversion is not supported yet");
+  int8_t** col_buffer = *col_buffer_ptr;
+  auto childVal = child->asFlatVector<Timestamp>();
+  auto* rawValues = childVal->mutableRawValues();
+  int64_t* column = (int64_t*)std::malloc(sizeof(int64_t) * num_rows);
+  auto nulls = child->rawNulls();
+  for (auto pos = 0; pos < num_rows; pos++) {
+    if (child->mayHaveNulls() && bits::isBitNull(nulls, pos)) {
+      column[pos] = std::numeric_limits<int64_t>::min();
+    } else {
+      // convert to nanoseconds for now to avoid precision loss
+      column[pos] = rawValues[pos].getSeconds() * kNanoSecsPerSec +
+          rawValues[pos].getNanos();
+    }
+  }
+  col_buffer[idx] = reinterpret_cast<int8_t*>(column);
 }
 
 void toCiderResult(
@@ -246,10 +264,6 @@ VectorPtr toVeloxImpl<TypeKind::VARBINARY>(
   VELOX_NYI(" {} conversion is not supported yet");
 }
 
-static constexpr int64_t kNanoSecsPerSec = 1000000000;
-static constexpr int64_t kMicroSecsPerSec = 1000000;
-static constexpr int64_t kMilliSecsPerSec = 1000;
-
 template <>
 VectorPtr toVeloxImpl<TypeKind::TIMESTAMP>(
     const TypePtr& vType,
@@ -259,7 +273,6 @@ VectorPtr toVeloxImpl<TypeKind::TIMESTAMP>(
     int32_t dimen) {
   auto result = BaseVector::create(vType, num_rows, pool);
   auto flatResult = result->as<FlatVector<Timestamp>>();
-  auto rawValues = flatResult->mutableRawValues();
   int64_t* srcValues = reinterpret_cast<int64_t*>(data_buffer);
   for (auto pos = 0; pos < num_rows; pos++) {
     if (srcValues[pos] == std::numeric_limits<int64_t>::min()) {
