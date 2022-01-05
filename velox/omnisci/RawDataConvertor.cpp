@@ -178,7 +178,8 @@ VectorPtr toVeloxImpl(
     const TypePtr& vType,
     int8_t* data_buffer,
     int num_rows,
-    memory::MemoryPool* pool) {
+    memory::MemoryPool* pool,
+    int32_t /*unused*/) {
   using T = typename TypeTraits<kind>::NativeType;
   auto result = BaseVector::create(vType, num_rows, pool);
   auto flatResult = result->as<FlatVector<T>>();
@@ -210,7 +211,8 @@ VectorPtr toVeloxImpl<TypeKind::BOOLEAN>(
     const TypePtr& vType,
     int8_t* data_buffer,
     int num_rows,
-    memory::MemoryPool* pool) {
+    memory::MemoryPool* pool,
+    int32_t /*unused*/) {
   auto result = BaseVector::create(vType, num_rows, pool);
   auto flatResult = result->as<FlatVector<bool>>();
   auto rawValues = flatResult->mutableRawValues<uint64_t>();
@@ -229,7 +231,8 @@ VectorPtr toVeloxImpl<TypeKind::VARCHAR>(
     const TypePtr& vType,
     int8_t* data_buffer,
     int num_rows,
-    memory::MemoryPool* pool) {
+    memory::MemoryPool* pool,
+    int32_t /*unused*/) {
   VELOX_NYI(" {} conversion is not supported yet");
 }
 
@@ -238,24 +241,22 @@ VectorPtr toVeloxImpl<TypeKind::VARBINARY>(
     const TypePtr& vType,
     int8_t* data_buffer,
     int num_rows,
-    memory::MemoryPool* pool) {
+    memory::MemoryPool* pool,
+    int32_t /*unused*/) {
   VELOX_NYI(" {} conversion is not supported yet");
 }
+
+static constexpr int64_t kNanoSecsPerSec = 1000000000;
+static constexpr int64_t kMicroSecsPerSec = 1000000;
+static constexpr int64_t kMilliSecsPerSec = 1000;
 
 template <>
 VectorPtr toVeloxImpl<TypeKind::TIMESTAMP>(
     const TypePtr& vType,
     int8_t* data_buffer,
     int num_rows,
-    memory::MemoryPool* pool) {
-  VELOX_NYI(" {} conversion is not supported yet");
-}
-
-VectorPtr toVeloxImplTS(
-    const TypePtr& vType,
-    int8_t* data_buffer,
-    int num_rows,
-    memory::MemoryPool* pool) {
+    memory::MemoryPool* pool,
+    int32_t dimen) {
   auto result = BaseVector::create(vType, num_rows, pool);
   auto flatResult = result->as<FlatVector<Timestamp>>();
   auto rawValues = flatResult->mutableRawValues();
@@ -264,11 +265,34 @@ VectorPtr toVeloxImplTS(
     if (srcValues[pos] == std::numeric_limits<int64_t>::min()) {
       result->setNull(pos, true);
     } else {
-      auto microseconds = srcValues[pos];
-      // TODO: need to get precision info from omnisci
-      flatResult->set(
-          pos,
-          Timestamp(microseconds / 1000000, (microseconds % 1000000) * 1000));
+      auto timeValue = srcValues[pos];
+      switch (dimen) {
+        case 0:
+          flatResult->set(pos, Timestamp(timeValue, 0));
+          break;
+        case 3:
+          flatResult->set(
+              pos,
+              Timestamp(
+                  timeValue / kMilliSecsPerSec,
+                  (timeValue % kMilliSecsPerSec) * 1000000));
+          break;
+        case 6:
+          flatResult->set(
+              pos,
+              Timestamp(
+                  timeValue / kMicroSecsPerSec,
+                  (timeValue % kMicroSecsPerSec) * 1000));
+          break;
+        case 9:
+          flatResult->set(
+              pos,
+              Timestamp(
+                  timeValue / kNanoSecsPerSec, timeValue % kNanoSecsPerSec));
+          break;
+        default:
+          VELOX_UNREACHABLE("Unknown dimension");
+      }
     }
   }
   return result;
@@ -278,22 +302,23 @@ VectorPtr toVeloxVector(
     const TypePtr& vType,
     int8_t* data_buffer,
     int num_rows,
-    memory::MemoryPool* pool) {
+    memory::MemoryPool* pool,
+    int32_t dimen) {
   return VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH(
-      toVeloxImpl, vType->kind(), vType, data_buffer, num_rows, pool);
+      toVeloxImpl, vType->kind(), vType, data_buffer, num_rows, pool, dimen);
 }
 
 RowVectorPtr RawDataConvertor::convertToRowVector(
     int8_t** col_buffer,
     std::vector<std::string> col_names,
     std::vector<std::string> col_types,
+    std::vector<int32_t> dimens,
     int num_rows,
     memory::MemoryPool* pool) {
   std::shared_ptr<const RowType> rowType;
   std::vector<VectorPtr> columns;
 
   // get row type from cider result
-  // TODO: may need to pass SQLTypeInfo from cider
   std::vector<TypePtr> types;
   int num_cols = col_types.size();
   types.reserve(num_cols);
@@ -304,7 +329,8 @@ RowVectorPtr RawDataConvertor::convertToRowVector(
   // convert col buffer to vector ptr
   columns.reserve(num_cols);
   for (int i = 0; i < num_cols; i++) {
-    columns.push_back(toVeloxVector(types[i], col_buffer[i], num_rows, pool));
+    columns.push_back(
+        toVeloxVector(types[i], col_buffer[i], num_rows, pool, dimens[i]));
   }
   rowType = std::make_shared<RowType>(move(col_names), move(types));
   return std::make_shared<RowVector>(

@@ -78,10 +78,8 @@ TEST_F(ResultConvertTest, VeloxToCiderDirectConvert) {
   int32_t* col_0 = reinterpret_cast<int32_t*>(colBuffer[0]);
   int64_t* col_1 = reinterpret_cast<int64_t*>(colBuffer[1]);
   double* col_2 = reinterpret_cast<double*>(colBuffer[2]);
-  // uint8_t* col_3 = reinterpret_cast<uint8_t*>(colBuffer[3]);
-  // int8_t* col_3 = reinterpret_cast<int8_t*>(colBuffer[3]);
-  // uint64_t* col_3_tmp = reinterpret_cast<uint64_t*>(colBuffer[3]);
   int8_t* col_3 = colBuffer[3];
+
   for (auto idx = 0; idx < numRows; idx++) {
     if (data_0[idx] == std::nullopt) {
       EXPECT_EQ(inline_int_null_value<int32_t>(), col_0[idx]);
@@ -126,18 +124,20 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
   std::shared_ptr<DataConvertor> convertor =
       DataConvertor::create(CONVERT_TYPE::DIRECT);
   int num_rows = 10;
-  int8_t** col_buffer = (int8_t**)std::malloc(sizeof(int8_t*) * 4);
+  int8_t** col_buffer = (int8_t**)std::malloc(sizeof(int8_t*) * 5);
 
   int32_t* col_0 = (int32_t*)std::malloc(sizeof(int32_t) * 10);
   int64_t* col_1 = (int64_t*)std::malloc(sizeof(int64_t) * 10);
   double* col_2 = (double*)std::malloc(sizeof(double) * 10);
   int8_t* col_3 = (int8_t*)std::malloc(sizeof(int8_t) * 10);
+  int64_t* col_4 = (int64_t*)std::malloc(sizeof(int64_t) * 10);
 
   for (int i = 0; i < num_rows; i++) {
     col_0[i] = i;
     col_1[i] = i * 123;
     col_2[i] = i * 3.14;
     col_3[i] = i % 2 ? true : false;
+    col_4[i] = i + 86400000000;
   }
 
   for (int i = 3; i < num_rows; i += 3) {
@@ -145,20 +145,25 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
     col_1[i] = inline_int_null_value<int64_t>();
     col_2[i] = DBL_MIN;
     col_3[i] = inline_int_null_value<int8_t>();
+    col_4[i] = inline_int_null_value<int64_t>();
   }
 
   col_buffer[0] = reinterpret_cast<int8_t*>(col_0);
   col_buffer[1] = reinterpret_cast<int8_t*>(col_1);
   col_buffer[2] = reinterpret_cast<int8_t*>(col_2);
   col_buffer[3] = col_3;
+  col_buffer[4] = reinterpret_cast<int8_t*>(col_4);
 
-  std::vector<std::string> col_names = {"col_0", "col_1", "col_2", "col_3"};
-  std::vector<std::string> col_types = {"INT", "BIGINT", "DOUBLE", "BOOL"};
+  std::vector<std::string> col_names = {
+      "col_0", "col_1", "col_2", "col_3", "col_4"};
+  std::vector<std::string> col_types = {
+      "INT", "BIGINT", "DOUBLE", "BOOL", "TIMESTAMP"};
+  std::vector<int32_t> dimens = {0, 0, 0, 0, 6};
   RowVectorPtr rvp = convertor->convertToRowVector(
-      col_buffer, col_names, col_types, num_rows, pool_.get());
+      col_buffer, col_names, col_types, dimens, num_rows, pool_.get());
   RowVector* row = rvp.get();
   auto* rowVector = row->as<RowVector>();
-  EXPECT_EQ(4, rowVector->childrenSize());
+  EXPECT_EQ(5, rowVector->childrenSize());
   VectorPtr& child_0 = rowVector->childAt(0);
   EXPECT_TRUE(child_0->mayHaveNulls());
   auto childVal_0 = child_0->asFlatVector<int32_t>();
@@ -207,11 +212,27 @@ TEST_F(ResultConvertTest, CiderToVeloxDirectConvert) {
       EXPECT_EQ(childVal_3->valueAt(idx), col_3[idx]);
     }
   }
+
+  VectorPtr& child_4 = rowVector->childAt(4);
+  EXPECT_TRUE(child_4->mayHaveNulls());
+  auto childVal_4 = child_4->asFlatVector<Timestamp>();
+  auto* rawValues_4 = childVal_4->mutableRawValues();
+  auto nulls_4 = child_4->rawNulls();
+  for (auto idx = 0; idx < num_rows; idx++) {
+    if (col_4[idx] == inline_int_null_value<int64_t>()) {
+      EXPECT_TRUE(bits::isBitNull(nulls_4, idx));
+    } else {
+      EXPECT_EQ(
+          childVal_4->valueAt(idx),
+          Timestamp(col_4[idx] / 1000000, (col_4[idx] % 1000000) * 1000));
+    }
+  }
   // release buffer
   std::free(col_buffer[0]);
   std::free(col_buffer[1]);
   std::free(col_buffer[2]);
   std::free(col_buffer[3]);
+  std::free(col_buffer[4]);
   std::free(col_buffer);
 }
 
