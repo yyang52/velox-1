@@ -35,18 +35,40 @@ class HybridExecOperatorTest : public OperatorTestBase {
   void assertHybridQuery(
       const std::shared_ptr<core::PlanNode>& planNode,
       const std::string& duckDBSql) {
+    auto startCider = std::chrono::system_clock::now();
+
     Operator::registerOperator(HybridExecOperator::planNodeTranslator);
     facebook::velox::cider::CiderExecutionUnitGenerator generator;
     auto hybridPlan = generator.transformPlan(planNode);
     // TODO: we should verify whether this hybridPlan is valid.
     assertQuery(hybridPlan, duckDBSql);
+
+    auto endCider = std::chrono::system_clock::now();
+    auto durationCider = std::chrono::duration_cast<std::chrono::microseconds>(
+        endCider - startCider);
+    std::cout << "Cider compute takes " << durationCider.count() << " us "
+              << std::endl;
+  }
+
+  void assertVeloxQuery(
+      const std::shared_ptr<core::PlanNode>& planNode,
+      const std::string& duckDBSql) {
+    auto startVelox = std::chrono::system_clock::now();
+
+    assertQuery(planNode, duckDBSql);
+
+    auto endVelox = std::chrono::system_clock::now();
+    auto durationVelox = std::chrono::duration_cast<std::chrono::microseconds>(
+        endVelox - startVelox);
+    std::cout << "Velox compute takes " << durationVelox.count() << " us "
+              << std::endl;
   }
 
   // without null value
   std::vector<RowVectorPtr> createIncreaseInputData() {
     std::vector<RowVectorPtr> vectors;
-    int batchNum = 10;
-    int batchSize = 100;
+    int batchNum = 1000;
+    int batchSize = 2000;
     for (int32_t i = 0; i < batchNum; ++i) {
       auto vector = std::dynamic_pointer_cast<RowVector>(
           BatchMaker::createIncreaseBatch(rowType_, batchSize, *pool_));
@@ -57,8 +79,8 @@ class HybridExecOperatorTest : public OperatorTestBase {
 
   std::vector<RowVectorPtr> createRandomInputData() {
     std::vector<RowVectorPtr> vectors;
-    int batchNum = 10;
-    int batchSize = 100;
+    int batchNum = 1000;
+    int batchSize = 4000;
     for (int32_t i = 0; i < batchNum; ++i) {
       auto vector = std::dynamic_pointer_cast<RowVector>(
           BatchMaker::createBatch(rowType_, batchSize, *pool_));
@@ -87,7 +109,7 @@ TEST_F(HybridExecOperatorTest, sum_int) {
               {}, {"sum(c0)"}, {}, core::AggregationNode::Step::kPartial, false)
           .planNode();
 
-  assertQuery(plan, duckDbSql);
+  assertVeloxQuery(plan, duckDbSql);
   assertHybridQuery(plan, duckDbSql);
 }
 
@@ -104,7 +126,7 @@ TEST_F(HybridExecOperatorTest, sum_double) {
               {}, {"sum(c1)"}, {}, core::AggregationNode::Step::kPartial, false)
           .planNode();
 
-  assertQuery(plan, duckDbSql);
+  assertVeloxQuery(plan, duckDbSql);
   assertHybridQuery(plan, duckDbSql);
 }
 
@@ -121,7 +143,7 @@ TEST_F(HybridExecOperatorTest, sum_bigint) {
               {}, {"sum(c4)"}, {}, core::AggregationNode::Step::kPartial, false)
           .planNode();
 
-  assertQuery(plan, duckDbSql);
+  assertVeloxQuery(plan, duckDbSql);
   assertHybridQuery(plan, duckDbSql);
 }
 
@@ -141,7 +163,7 @@ TEST_F(HybridExecOperatorTest, sum_int_product_double) {
           .aggregation(
               {}, {"sum(e1)"}, {}, core::AggregationNode::Step::kPartial, false)
           .planNode();
-  assertQuery(plan, duckDbSql);
+  assertVeloxQuery(plan, duckDbSql);
   assertHybridQuery(plan, duckDbSql);
 }
 
@@ -188,7 +210,7 @@ TEST_F(HybridExecOperatorTest, sum_int_null) {
           .aggregation(
               {}, {"sum(c0)"}, {}, core::AggregationNode::Step::kPartial, false)
           .planNode();
-  assertQuery(plan, duckDbSql);
+  assertVeloxQuery(plan, duckDbSql);
   assertHybridQuery(plan, duckDbSql);
 }
 
@@ -204,7 +226,7 @@ TEST_F(HybridExecOperatorTest, sum_int_null_) {
           .aggregation(
               {}, {"sum(c0)"}, {}, core::AggregationNode::Step::kPartial, false)
           .planNode();
-  assertQuery(plan, duckDbSql);
+  assertVeloxQuery(plan, duckDbSql);
   assertHybridQuery(plan, duckDbSql);
 }
 
@@ -221,6 +243,6 @@ TEST_F(HybridExecOperatorTest, sum_long_null) {
           .aggregation(
               {}, {"sum(c5)"}, {}, core::AggregationNode::Step::kPartial, false)
           .planNode();
-  assertQuery(plan, duckDbSql);
+  assertVeloxQuery(plan, duckDbSql);
   assertHybridQuery(plan, duckDbSql);
 }

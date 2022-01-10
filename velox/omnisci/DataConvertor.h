@@ -42,7 +42,10 @@ class DataConvertor {
 
   static std::shared_ptr<DataConvertor> create(CONVERT_TYPE type);
 
-  virtual CiderResultSet convertToCider(RowVectorPtr input, int num_rows) = 0;
+  virtual CiderResultSet convertToCider(
+      RowVectorPtr input,
+      int num_rows,
+      std::chrono::microseconds* timer) = 0;
 
   virtual RowVectorPtr convertToRowVector(
       int8_t** col_buffer,

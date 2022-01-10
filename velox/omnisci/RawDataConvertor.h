@@ -24,7 +24,10 @@ class RawDataConvertor : public DataConvertor {
  public:
   RawDataConvertor() {}
 
-  CiderResultSet convertToCider(RowVectorPtr input, int num_rows) override;
+  CiderResultSet convertToCider(
+      RowVectorPtr input,
+      int num_rows,
+      std::chrono::microseconds* timer) override;
 
   RowVectorPtr convertToRowVector(
       int8_t** col_buffer,

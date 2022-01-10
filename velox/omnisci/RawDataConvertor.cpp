@@ -26,7 +26,7 @@ void toCiderImpl(
   int8_t** col_buffer = *col_buffer_ptr;
   auto childVal = child->asFlatVector<T>();
   auto* rawValues = childVal->mutableRawValues();
-  T* column = (T*)std::malloc(sizeof(T) * num_rows);
+//  T* column = (T*)std::malloc(sizeof(T) * num_rows);
   if (child->mayHaveNulls()) {
     auto nulls = child->rawNulls();
     for (auto pos = 0; pos < num_rows; pos++) {
@@ -43,8 +43,8 @@ void toCiderImpl(
       }
     }
   }
-  memcpy(column, rawValues, sizeof(T) * num_rows);
-  col_buffer[idx] = reinterpret_cast<int8_t*>(column);
+//  memcpy(column, rawValues, sizeof(T) * num_rows);
+  col_buffer[idx] = reinterpret_cast<int8_t*>(rawValues);
 }
 
 template <>
@@ -130,7 +130,8 @@ void toCiderResult(
 
 CiderResultSet RawDataConvertor::convertToCider(
     RowVectorPtr input,
-    int num_rows) {
+    int num_rows,
+    std::chrono::microseconds* timer) {
   RowVector* row = input.get();
   auto* rowVector = row->as<RowVector>();
   auto size = rowVector->childrenSize();
@@ -142,6 +143,17 @@ CiderResultSet RawDataConvertor::convertToCider(
       case VectorEncoding::Simple::FLAT:
         toCiderResult(child, idx, col_buffer_ptr, num_rows);
         break;
+      case VectorEncoding::Simple::LAZY: {
+        // For LazyVector, we will load it here and use as TypeVector to use.
+        auto tic = std::chrono::system_clock::now();
+        auto vec = (std::dynamic_pointer_cast<LazyVector>(child))->loadedVectorShared();
+        auto toc = std::chrono::system_clock::now();
+        if(timer) {
+          *timer +=  std::chrono::duration_cast<std::chrono::microseconds>(toc - tic);
+        }
+        toCiderResult(vec, idx, col_buffer_ptr, num_rows);
+        break;
+      }
       default:
         VELOX_NYI(" {} conversion is not supported yet", child->encoding());
     }

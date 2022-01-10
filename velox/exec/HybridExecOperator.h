@@ -71,7 +71,7 @@ class HybridExecOperator : public Operator {
     ciderKernel_ = CiderExecutionKernel::create();
     // todo: we don't have input yet.
     ciderKernel_->compileWorkUnit(*relAlgExecUnit_, buildInputTableInfo());
-    std::cout << "IR: " << ciderKernel_->getLlvmIR() << std::endl;
+//    std::cout << "IR: " << ciderKernel_->getLlvmIR() << std::endl;
 
     // hardcode, init a DataConvertor here.
     dataConvertor_ = DataConvertor::create(CONVERT_TYPE::DIRECT);
@@ -91,6 +91,9 @@ class HybridExecOperator : public Operator {
 
   void finish() override {
     Operator::finish();
+    std::cout << "conversion takes " << dataConversionCounter.count()  << "us" << std::endl;
+    std::cout << "compute takes " << computeCounter.count()  << "us" << std::endl;
+    std::cout << "load vector takes " << convertorInternalCounter.count()  << "us" << std::endl;
   }
 
  private:
@@ -117,6 +120,10 @@ class HybridExecOperator : public Operator {
   RowVectorPtr tmpOut;
 
   std::shared_ptr<DataConvertor> dataConvertor_;
+
+  std::chrono::microseconds dataConversionCounter;
+  std::chrono::microseconds computeCounter;
+  std::chrono::microseconds convertorInternalCounter;
 
   void process();
 

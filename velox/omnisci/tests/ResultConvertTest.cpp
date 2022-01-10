@@ -71,7 +71,7 @@ TEST_F(ResultConvertTest, VeloxToCiderDirectConvert) {
   };
   auto c_3 = vectorMaker_.flatVectorNullable<bool>(data_3);
   auto rowVector = vectorMaker_.rowVector({c_0, c_1, c_2, c_3});
-  CiderResultSet crs = convertor->convertToCider(rowVector, numRows);
+  CiderResultSet crs = convertor->convertToCider(rowVector, numRows, nullptr);
   EXPECT_EQ(10, crs.numRows);
 
   int8_t** colBuffer = crs.colBuffer;

@@ -15,7 +15,8 @@
 namespace facebook::velox::cider {
 CiderResultSet ArrowDataConvertor::convertToCider(
     RowVectorPtr input,
-    int num_rows) {
+    int num_rows,
+    std::chrono::microseconds* timer) {
   // TODO
   VELOX_NYI("Arrow conversion not yet supported.");
 };
