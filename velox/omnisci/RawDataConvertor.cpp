@@ -26,7 +26,7 @@ void toCiderImpl(
   int8_t** col_buffer = *col_buffer_ptr;
   auto childVal = child->asFlatVector<T>();
   auto* rawValues = childVal->mutableRawValues();
-  T* column = (T*)std::malloc(sizeof(T) * num_rows);
+  // T* column = (T*)std::malloc(sizeof(T) * num_rows);
   if (child->mayHaveNulls()) {
     auto nulls = child->rawNulls();
     for (auto pos = 0; pos < num_rows; pos++) {
@@ -43,8 +43,8 @@ void toCiderImpl(
       }
     }
   }
-  memcpy(column, rawValues, sizeof(T) * num_rows);
-  col_buffer[idx] = reinterpret_cast<int8_t*>(column);
+  // memcpy(column, rawValues, sizeof(T) * num_rows);
+  col_buffer[idx] = reinterpret_cast<int8_t*>(rawValues);
 }
 
 template <>
@@ -274,38 +274,37 @@ VectorPtr toVeloxImpl<TypeKind::TIMESTAMP>(
   auto result = BaseVector::create(vType, num_rows, pool);
   auto flatResult = result->as<FlatVector<Timestamp>>();
   int64_t* srcValues = reinterpret_cast<int64_t*>(data_buffer);
+  auto scaleSecond = 1;
+  auto scaleNano = 1;
+  switch (dimen) {
+    case 0:
+      scaleSecond = 1;
+      scaleNano = 1;
+      break;
+    case 3:
+      scaleSecond = kMilliSecsPerSec;
+      scaleNano = kMicroSecsPerSec;
+      break;
+    case 6:
+      scaleSecond = kMicroSecsPerSec;
+      scaleNano = kMilliSecsPerSec;
+      break;
+    case 9:
+      scaleSecond = kNanoSecsPerSec;
+      scaleNano = 1;
+      break;
+    default:
+      VELOX_UNREACHABLE("Unknown dimension");
+  }
   for (auto pos = 0; pos < num_rows; pos++) {
     if (srcValues[pos] == std::numeric_limits<int64_t>::min()) {
       result->setNull(pos, true);
     } else {
       auto timeValue = srcValues[pos];
-      switch (dimen) {
-        case 0:
-          flatResult->set(pos, Timestamp(timeValue, 0));
-          break;
-        case 3:
-          flatResult->set(
-              pos,
-              Timestamp(
-                  timeValue / kMilliSecsPerSec,
-                  (timeValue % kMilliSecsPerSec) * 1000000));
-          break;
-        case 6:
-          flatResult->set(
-              pos,
-              Timestamp(
-                  timeValue / kMicroSecsPerSec,
-                  (timeValue % kMicroSecsPerSec) * 1000));
-          break;
-        case 9:
-          flatResult->set(
-              pos,
-              Timestamp(
-                  timeValue / kNanoSecsPerSec, timeValue % kNanoSecsPerSec));
-          break;
-        default:
-          VELOX_UNREACHABLE("Unknown dimension");
-      }
+      flatResult->set(
+          pos,
+          Timestamp(
+              timeValue / scaleSecond, (timeValue % scaleSecond) * scaleNano));
     }
   }
   return result;
