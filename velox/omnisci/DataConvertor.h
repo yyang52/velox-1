@@ -25,7 +25,7 @@
 #include "velox/vector/ComplexVector.h"
 
 using namespace facebook::velox;
-namespace facebook::velox::omnisci {
+namespace facebook::velox::cider {
 enum CONVERT_TYPE { ARROW, DIRECT };
 
 struct CiderResultSet {
@@ -42,7 +42,10 @@ class DataConvertor {
 
   static std::shared_ptr<DataConvertor> create(CONVERT_TYPE type);
 
-  virtual CiderResultSet convertToCider(RowVectorPtr input, int num_rows) = 0;
+  virtual CiderResultSet convertToCider(
+      RowVectorPtr input,
+      int num_rows,
+      std::chrono::microseconds* timer) = 0;
 
   virtual RowVectorPtr convertToRowVector(
       int8_t** col_buffer,
@@ -52,4 +55,4 @@ class DataConvertor {
       int num_rows,
       memory::MemoryPool* pool) = 0;
 };
-} // namespace facebook::velox::omnisci
+} // namespace facebook::velox::cider

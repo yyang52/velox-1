@@ -63,6 +63,31 @@ VectorPtr createScalar(
       &pool, nulls, size, values, std::vector<BufferPtr>{});
 }
 
+template <typename T>
+VectorPtr createIncreaseScalar(
+    size_t size,
+    MemoryPool& pool) {
+  BufferPtr values = AlignedBuffer::allocate<T>(size, &pool);
+  auto valuesPtr = values->asMutableRange<T>();
+
+  BufferPtr nulls = AlignedBuffer::allocate<char>(bits::nbytes(size), &pool);
+  auto* nullsPtr = nulls->asMutable<uint64_t>();
+
+  size_t nullCount = 0;
+  for (size_t i = 0; i < size; ++i) {
+    auto notNull = true; // don't set any value to null
+    bits::setNull(nullsPtr, i, !notNull);
+    if (notNull) {
+      valuesPtr[i] = static_cast<T>(i);
+    } else {
+      nullCount++;
+    }
+  }
+
+  return std::make_shared<FlatVector<T>>(
+      &pool, nulls, size, values, std::vector<BufferPtr>{});
+}
+
 template <TypeKind KIND>
 VectorPtr BatchMaker::createVector(
     const std::shared_ptr<const Type>& /* unused */,
@@ -160,6 +185,89 @@ VectorPtr BatchMaker::createVector<TypeKind::DOUBLE>(
     std::function<bool(vector_size_t /*index*/)> /*isNullAt*/) {
   return createScalar<double>(
       size, gen, [&gen]() { return Random::randDouble01(gen); }, pool);
+}
+
+template <TypeKind KIND>
+VectorPtr BatchMaker::createIncreaseVector(
+    const std::shared_ptr<const Type>& /* unused */,
+    size_t /* unused */,
+    memory::MemoryPool& /* unused */,
+    std::function<bool(vector_size_t /*index*/)> /* unused */) {
+  VELOX_NYI();
+}
+
+template <>
+VectorPtr BatchMaker::createIncreaseVector<TypeKind::BOOLEAN>(
+    const std::shared_ptr<const Type>& /* unused */,
+    size_t size,
+    MemoryPool& pool,
+    std::function<bool(vector_size_t /*index*/)> /*isNullAt*/) {
+  return createIncreaseScalar<bool>(
+      size,  pool);
+}
+
+template <>
+VectorPtr BatchMaker::createIncreaseVector<TypeKind::TINYINT>(
+    const std::shared_ptr<const Type>& /* unused */,
+    size_t size,
+    MemoryPool& pool,
+    std::function<bool(vector_size_t /*index*/)> /*isNullAt*/) {
+  return createIncreaseScalar<int8_t>(
+      size,
+      pool);
+}
+
+template <>
+VectorPtr BatchMaker::createIncreaseVector<TypeKind::SMALLINT>(
+    const std::shared_ptr<const Type>& /* unused */,
+    size_t size,
+    MemoryPool& pool,
+    std::function<bool(vector_size_t /*index*/)> /*isNullAt*/) {
+  return createIncreaseScalar<int16_t>(
+      size,
+      pool);
+}
+
+template <>
+VectorPtr BatchMaker::createIncreaseVector<TypeKind::INTEGER>(
+    const std::shared_ptr<const Type>& /* unused */,
+    size_t size,
+    MemoryPool& pool,
+    std::function<bool(vector_size_t /*index*/)> /*isNullAt*/) {
+  return createIncreaseScalar<int32_t>(
+      size,
+      pool);
+}
+
+template <>
+VectorPtr BatchMaker::createIncreaseVector<TypeKind::BIGINT>(
+    const std::shared_ptr<const Type>& /* unused */,
+    size_t size,
+    MemoryPool& pool,
+    std::function<bool(vector_size_t /*index*/)> /*isNullAt*/) {
+  return createIncreaseScalar<int64_t>(
+      size, pool);
+}
+
+template <>
+VectorPtr BatchMaker::createIncreaseVector<TypeKind::REAL>(
+    const std::shared_ptr<const Type>& /* unused */,
+    size_t size,
+    MemoryPool& pool,
+    std::function<bool(vector_size_t /*index*/)> /*isNullAt*/) {
+  return createIncreaseScalar<float>(
+      size,
+      pool);
+}
+
+template <>
+VectorPtr BatchMaker::createIncreaseVector<TypeKind::DOUBLE>(
+    const std::shared_ptr<const Type>& /* unused */,
+    size_t size,
+    MemoryPool& pool,
+    std::function<bool(vector_size_t /*index*/)> /*isNullAt*/) {
+  return createIncreaseScalar<double>(
+      size,pool);
 }
 
 VectorPtr createBinary(
@@ -307,6 +415,37 @@ VectorPtr createRow(
   return std::make_shared<RowVector>(
       &pool, type, nulls, size, children, nullCount);
 }
+
+VectorPtr createIncreaseRow(
+    const std::shared_ptr<const Type>& type,
+    size_t size,
+    bool allowNulls,
+    MemoryPool& pool,
+    std::function<bool(vector_size_t /*index*/)> isNullAt) {
+  BufferPtr nulls;
+  size_t nullCount = 0;
+
+  if (allowNulls) {
+    // should not reach here
+  }
+
+  auto& row = type->asRow();
+  std::vector<VectorPtr> children(row.size());
+  for (size_t i = 0; i < row.size(); ++i) {
+    auto child = row.childAt(i);
+    children[i] = VELOX_DYNAMIC_TYPE_DISPATCH(
+        BatchMaker::createIncreaseVector,
+        child->kind(),
+        child,
+        size,
+        pool,
+        isNullAt);
+  }
+
+  return std::make_shared<RowVector>(
+      &pool, type, nulls, size, children, nullCount);
+}
+
 
 template <>
 VectorPtr BatchMaker::createVector<TypeKind::ROW>(
@@ -573,6 +712,15 @@ VectorPtr BatchMaker::createBatch(
     std::function<bool(vector_size_t /*index*/)> isNullAt) {
   std::mt19937 gen;
   return createBatch(type, capacity, memoryPool, gen, isNullAt);
+}
+
+VectorPtr BatchMaker::createIncreaseBatch(
+    const std::shared_ptr<const Type>& type,
+    uint64_t capacity,
+    MemoryPool& memoryPool,
+    std::function<bool(vector_size_t /*index*/)> isNullAt) {
+
+  return createIncreaseRow(type, capacity, false, memoryPool, isNullAt);
 }
 
 } // namespace facebook::velox::test

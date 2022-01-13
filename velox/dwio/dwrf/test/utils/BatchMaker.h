@@ -53,6 +53,19 @@ struct BatchMaker {
     std::mt19937 gen;
     return createVector<KIND>(type, size, pool, gen, isNullAt);
   }
+
+  template <TypeKind KIND>
+  static VectorPtr createIncreaseVector(
+      const std::shared_ptr<const Type>& /* unused */,
+      size_t /* unused */,
+      memory::MemoryPool& /* unused */,
+      std::function<bool(vector_size_t /*index*/)> /* unused */) ;
+
+  static VectorPtr createIncreaseBatch(
+      const std::shared_ptr<const Type>& type,
+      uint64_t capacity,
+      memory::MemoryPool& pool,
+      std::function<bool(vector_size_t /*index*/)> isNullAt = nullptr) ;
 };
 
 } // namespace facebook::velox::test
