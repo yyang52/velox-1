@@ -17,6 +17,7 @@
 #include <cfloat>
 #include <cstring>
 #include <iostream>
+#include <tuple>
 #include <vector>
 
 #include "velox/common/base/VeloxException.h"
@@ -27,7 +28,12 @@
 using namespace facebook::velox;
 namespace facebook::velox::omnisci {
 enum CONVERT_TYPE { ARROW, DIRECT };
-
+enum CIDER_DIMEN {
+  SECOND = 0,
+  MILLISECOND = 3,
+  MICROSECOND = 6,
+  NANOSECOND = 9
+};
 struct CiderResultSet {
   CiderResultSet(int8_t** col_buffer, int num_rows)
       : colBuffer(col_buffer), numRows(num_rows) {}

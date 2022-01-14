@@ -264,6 +264,21 @@ VectorPtr toVeloxImpl<TypeKind::VARBINARY>(
   VELOX_NYI(" {} conversion is not supported yet");
 }
 
+std::tuple<int64_t, int64_t> calculateScale(int32_t dimen) {
+  switch (dimen) {
+    case CIDER_DIMEN::SECOND:
+      return {1, 1};
+    case CIDER_DIMEN::MILLISECOND:
+      return {kMilliSecsPerSec, kMicroSecsPerSec};
+    case CIDER_DIMEN::MICROSECOND:
+      return {kMicroSecsPerSec, kMilliSecsPerSec};
+    case CIDER_DIMEN::NANOSECOND:
+      return {kNanoSecsPerSec, 1};
+    default:
+      VELOX_UNREACHABLE("Unknown dimension");
+  }
+}
+
 template <>
 VectorPtr toVeloxImpl<TypeKind::TIMESTAMP>(
     const TypePtr& vType,
@@ -274,28 +289,7 @@ VectorPtr toVeloxImpl<TypeKind::TIMESTAMP>(
   auto result = BaseVector::create(vType, num_rows, pool);
   auto flatResult = result->as<FlatVector<Timestamp>>();
   int64_t* srcValues = reinterpret_cast<int64_t*>(data_buffer);
-  auto scaleSecond = 1;
-  auto scaleNano = 1;
-  switch (dimen) {
-    case 0:
-      scaleSecond = 1;
-      scaleNano = 1;
-      break;
-    case 3:
-      scaleSecond = kMilliSecsPerSec;
-      scaleNano = kMicroSecsPerSec;
-      break;
-    case 6:
-      scaleSecond = kMicroSecsPerSec;
-      scaleNano = kMilliSecsPerSec;
-      break;
-    case 9:
-      scaleSecond = kNanoSecsPerSec;
-      scaleNano = 1;
-      break;
-    default:
-      VELOX_UNREACHABLE("Unknown dimension");
-  }
+  auto [scaleSecond, scaleNano] = calculateScale(dimen);
   for (auto pos = 0; pos < num_rows; pos++) {
     if (srcValues[pos] == std::numeric_limits<int64_t>::min()) {
       result->setNull(pos, true);
