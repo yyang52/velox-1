@@ -18,6 +18,7 @@
 #include "velox/dwio/common/InputStream.h"
 #include "velox/dwio/dwrf/common/CachedBufferedInput.h"
 #include "velox/expression/ControlExpr.h"
+#include "velox/dwio/dwrf/reader/DwrfReader.h"
 
 using namespace facebook::velox::dwrf;
 using WriterConfig = facebook::velox::dwrf::Config;

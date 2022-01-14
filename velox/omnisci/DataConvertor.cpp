@@ -13,7 +13,7 @@
  */
 #include "velox/omnisci/ArrowDataConvertor.h"
 #include "velox/omnisci/RawDataConvertor.h"
-namespace facebook::velox::omnisci {
+namespace facebook::velox::cider {
 std::shared_ptr<DataConvertor> DataConvertor::create(CONVERT_TYPE type) {
   std::shared_ptr<DataConvertor> convertor;
   switch (type) {
@@ -27,4 +27,4 @@ std::shared_ptr<DataConvertor> DataConvertor::create(CONVERT_TYPE type) {
       VELOX_USER_FAIL("invalid input");
   }
 }
-} // namespace facebook::velox::omnisci
+} // namespace facebook::velox::cider

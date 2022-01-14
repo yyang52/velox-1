@@ -21,8 +21,8 @@
 
 using namespace facebook::velox;
 using facebook::velox::test::VectorMaker;
-using namespace facebook::velox::omnisci;
-using facebook::velox::omnisci::DataConvertor;
+using namespace facebook::velox::cider;
+using facebook::velox::cider::DataConvertor;
 
 class ResultConvertTest : public testing::Test {
  public:
@@ -114,6 +114,14 @@ void testToCiderDirect<Timestamp>(
           data[idx].value().getSeconds() * 1000000000 +
               data[idx].value().getNanos(),
           col_0[idx]);
+    }
+  }
+
+  for (auto idx = 0; idx < numRows; idx++) {
+    if (data_3[idx] == std::nullopt) {
+      EXPECT_EQ(inline_int_null_value<int8_t>(), col_3[idx]);
+    } else {
+      EXPECT_EQ(data_3[idx].value(), static_cast<bool>(col_3[idx]));
     }
   }
 }

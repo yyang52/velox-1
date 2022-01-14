@@ -12,10 +12,11 @@
  * limitations under the License.
  */
 #include "velox/omnisci/ArrowDataConvertor.h"
-namespace facebook::velox::omnisci {
+namespace facebook::velox::cider {
 CiderResultSet ArrowDataConvertor::convertToCider(
     RowVectorPtr input,
-    int num_rows) {
+    int num_rows,
+    std::chrono::microseconds* timer) {
   // TODO
   VELOX_NYI("Arrow conversion not yet supported.");
 };
@@ -30,4 +31,4 @@ RowVectorPtr ArrowDataConvertor::convertToRowVector(
   // TODO
   VELOX_NYI("Arrow conversion not yet supported.");
 };
-} // namespace facebook::velox::omnisci
+} // namespace facebook::velox::cider
