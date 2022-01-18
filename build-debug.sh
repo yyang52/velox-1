@@ -13,7 +13,7 @@
 
 SCRIPT_ROOT=`dirname $(readlink -f ${BASH_SOURCE[0]})`
 
-PREFIX=/usr/local/thirdparty
+PREFIX=/usr/local
 export PATH=$PREFIX/bin:$PATH
 export PATH=$PREFIX/go/bin:$PATH
 export LD_LIBRARY_PATH=$PREFIX/lib64:$PREFIX/lib:$LD_LIBRARY_PATH
@@ -42,6 +42,5 @@ cmake  \
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
     -DEXEC_WITH_OMNISCI=ON \
     ..
- make -j ${CPU_COUNT:-`nproc`} || make -j ${CPU_COUNT:-`nproc`} || make -j
-exit 0
-    -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
+    
+make -j ${CPU_COUNT:-`nproc`} || make -j $((${CPU_COUNT:-`nproc`}/2)) || make -j $((${CPU_COUNT:-`nproc`}/4))
