@@ -49,7 +49,7 @@ void testToCiderDirect(
     int numRows) {
   std::shared_ptr<DataConvertor> convertor =
       DataConvertor::create(CONVERT_TYPE::DIRECT);
-  CiderResultSet crs = convertor->convertToCider(rowVector, numRows);
+  CiderResultSet crs = convertor->convertToCider(rowVector, numRows, nullptr);
   EXPECT_EQ(numRows, crs.numRows);
 
   int8_t** colBuffer = crs.colBuffer;
@@ -78,7 +78,7 @@ void testToCiderDirect<bool>(
     int numRows) {
   std::shared_ptr<DataConvertor> convertor =
       DataConvertor::create(CONVERT_TYPE::DIRECT);
-  CiderResultSet crs = convertor->convertToCider(rowVector, numRows);
+  CiderResultSet crs = convertor->convertToCider(rowVector, numRows, nullptr);
   EXPECT_EQ(numRows, crs.numRows);
 
   int8_t** colBuffer = crs.colBuffer;
@@ -100,7 +100,7 @@ void testToCiderDirect<Timestamp>(
     int numRows) {
   std::shared_ptr<DataConvertor> convertor =
       DataConvertor::create(CONVERT_TYPE::DIRECT);
-  CiderResultSet crs = convertor->convertToCider(rowVector, numRows);
+  CiderResultSet crs = convertor->convertToCider(rowVector, numRows, nullptr);
   EXPECT_EQ(numRows, crs.numRows);
 
   int8_t** colBuffer = crs.colBuffer;
@@ -114,14 +114,6 @@ void testToCiderDirect<Timestamp>(
           data[idx].value().getSeconds() * 1000000000 +
               data[idx].value().getNanos(),
           col_0[idx]);
-    }
-  }
-
-  for (auto idx = 0; idx < numRows; idx++) {
-    if (data_3[idx] == std::nullopt) {
-      EXPECT_EQ(inline_int_null_value<int8_t>(), col_3[idx]);
-    } else {
-      EXPECT_EQ(data_3[idx].value(), static_cast<bool>(col_3[idx]));
     }
   }
 }

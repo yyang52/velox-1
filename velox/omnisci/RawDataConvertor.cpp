@@ -113,6 +113,7 @@ void toCiderImpl<TypeKind::VARBINARY>(
 static constexpr int64_t kNanoSecsPerSec = 1000000000;
 static constexpr int64_t kMicroSecsPerSec = 1000000;
 static constexpr int64_t kMilliSecsPerSec = 1000;
+static constexpr int64_t kSecsPerSec = 1;
 
 template <>
 void toCiderImpl<TypeKind::TIMESTAMP>(
@@ -164,10 +165,12 @@ CiderResultSet RawDataConvertor::convertToCider(
       case VectorEncoding::Simple::LAZY: {
         // For LazyVector, we will load it here and use as TypeVector to use.
         auto tic = std::chrono::system_clock::now();
-        auto vec = (std::dynamic_pointer_cast<LazyVector>(child))->loadedVectorShared();
+        auto vec = (std::dynamic_pointer_cast<LazyVector>(child))
+                       ->loadedVectorShared();
         auto toc = std::chrono::system_clock::now();
-        if(timer) {
-          *timer +=  std::chrono::duration_cast<std::chrono::microseconds>(toc - tic);
+        if (timer) {
+          *timer +=
+              std::chrono::duration_cast<std::chrono::microseconds>(toc - tic);
         }
         toCiderResult(vec, idx, col_buffer_ptr, num_rows);
         break;
@@ -279,13 +282,13 @@ VectorPtr toVeloxImpl<TypeKind::VARBINARY>(
 std::tuple<int64_t, int64_t> calculateScale(int32_t dimen) {
   switch (dimen) {
     case CIDER_DIMEN::SECOND:
-      return {1, 1};
+      return {kSecsPerSec, kNanoSecsPerSec};
     case CIDER_DIMEN::MILLISECOND:
       return {kMilliSecsPerSec, kMicroSecsPerSec};
     case CIDER_DIMEN::MICROSECOND:
       return {kMicroSecsPerSec, kMilliSecsPerSec};
     case CIDER_DIMEN::NANOSECOND:
-      return {kNanoSecsPerSec, 1};
+      return {kNanoSecsPerSec, kSecsPerSec};
     default:
       VELOX_UNREACHABLE("Unknown dimension");
   }
