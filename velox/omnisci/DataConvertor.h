@@ -17,8 +17,10 @@
 #include <cfloat>
 #include <cstring>
 #include <iostream>
+#include <tuple>
 #include <vector>
 
+#include "velox/buffer/Buffer.h"
 #include "velox/common/base/VeloxException.h"
 #include "velox/common/memory/Memory.h"
 #include "velox/omnisci/CiderNullValues.h"
@@ -27,7 +29,12 @@
 using namespace facebook::velox;
 namespace facebook::velox::cider {
 enum CONVERT_TYPE { ARROW, DIRECT };
-
+enum CIDER_DIMEN {
+  SECOND = 0,
+  MILLISECOND = 3,
+  MICROSECOND = 6,
+  NANOSECOND = 9
+};
 struct CiderResultSet {
   CiderResultSet(int8_t** col_buffer, int num_rows)
       : colBuffer(col_buffer), numRows(num_rows) {}
@@ -51,6 +58,7 @@ class DataConvertor {
       int8_t** col_buffer,
       std::vector<std::string> col_names,
       std::vector<std::string> col_types,
+      std::vector<int32_t> dimens,
       int num_rows,
       memory::MemoryPool* pool) = 0;
 };

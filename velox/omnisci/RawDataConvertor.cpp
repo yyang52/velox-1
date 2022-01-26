@@ -26,7 +26,7 @@ void toCiderImpl(
   int8_t** col_buffer = *col_buffer_ptr;
   auto childVal = child->asFlatVector<T>();
   auto* rawValues = childVal->mutableRawValues();
-//  T* column = (T*)std::malloc(sizeof(T) * num_rows);
+  // T* column = (T*)std::malloc(sizeof(T) * num_rows);
   if (child->mayHaveNulls()) {
     auto nulls = child->rawNulls();
     for (auto pos = 0; pos < num_rows; pos++) {
@@ -43,7 +43,7 @@ void toCiderImpl(
       }
     }
   }
-//  memcpy(column, rawValues, sizeof(T) * num_rows);
+  // memcpy(column, rawValues, sizeof(T) * num_rows);
   col_buffer[idx] = reinterpret_cast<int8_t*>(rawValues);
 }
 
@@ -110,13 +110,32 @@ void toCiderImpl<TypeKind::VARBINARY>(
   VELOX_NYI(" {} conversion is not supported yet");
 }
 
+static constexpr int64_t kNanoSecsPerSec = 1000000000;
+static constexpr int64_t kMicroSecsPerSec = 1000000;
+static constexpr int64_t kMilliSecsPerSec = 1000;
+static constexpr int64_t kSecsPerSec = 1;
+
 template <>
 void toCiderImpl<TypeKind::TIMESTAMP>(
     VectorPtr& child,
     int idx,
     int8_t*** col_buffer_ptr,
     int num_rows) {
-  VELOX_NYI(" {} conversion is not supported yet");
+  int8_t** col_buffer = *col_buffer_ptr;
+  auto childVal = child->asFlatVector<Timestamp>();
+  auto* rawValues = childVal->mutableRawValues();
+  int64_t* column = (int64_t*)std::malloc(sizeof(int64_t) * num_rows);
+  auto nulls = child->rawNulls();
+  for (auto pos = 0; pos < num_rows; pos++) {
+    if (child->mayHaveNulls() && bits::isBitNull(nulls, pos)) {
+      column[pos] = std::numeric_limits<int64_t>::min();
+    } else {
+      // convert to nanoseconds for now to avoid precision loss
+      column[pos] = rawValues[pos].getSeconds() * kNanoSecsPerSec +
+          rawValues[pos].getNanos();
+    }
+  }
+  col_buffer[idx] = reinterpret_cast<int8_t*>(column);
 }
 
 void toCiderResult(
@@ -146,10 +165,12 @@ CiderResultSet RawDataConvertor::convertToCider(
       case VectorEncoding::Simple::LAZY: {
         // For LazyVector, we will load it here and use as TypeVector to use.
         auto tic = std::chrono::system_clock::now();
-        auto vec = (std::dynamic_pointer_cast<LazyVector>(child))->loadedVectorShared();
+        auto vec = (std::dynamic_pointer_cast<LazyVector>(child))
+                       ->loadedVectorShared();
         auto toc = std::chrono::system_clock::now();
-        if(timer) {
-          *timer +=  std::chrono::duration_cast<std::chrono::microseconds>(toc - tic);
+        if (timer) {
+          *timer +=
+              std::chrono::duration_cast<std::chrono::microseconds>(toc - tic);
         }
         toCiderResult(vec, idx, col_buffer_ptr, num_rows);
         break;
@@ -185,18 +206,40 @@ TypePtr getVeloxType(std::string typeName) {
     VELOX_NYI(" {} conversion is not supported yet", typeName);
 }
 
+struct BufferReleaser {
+  void addRef() const {}
+  void release() const {}
+};
+
 template <TypeKind kind>
 VectorPtr toVeloxImpl(
     const TypePtr& vType,
     int8_t* data_buffer,
     int num_rows,
-    memory::MemoryPool* pool) {
+    memory::MemoryPool* pool,
+    int32_t /*unused*/) {
   using T = typename TypeTraits<kind>::NativeType;
-  auto result = BaseVector::create(vType, num_rows, pool);
-  auto flatResult = result->as<FlatVector<T>>();
-  auto rawValues = flatResult->mutableRawValues();
+  BufferReleaser releaser;
+  BufferPtr buffer = BufferView<BufferReleaser&>::create(
+      reinterpret_cast<const uint8_t*>(data_buffer),
+      num_rows * vType->cppSizeInBytes(),
+      releaser);
+  auto result = std::make_shared<FlatVector<T>>(
+      pool,
+      vType,
+      BufferPtr(nullptr),
+      num_rows,
+      buffer,
+      std::vector<BufferPtr>(),
+      cdvi::EMPTY_METADATA,
+      std::nullopt,
+      0);
+
+  // auto result = BaseVector::create(vType, num_rows, pool);
+  // auto flatResult = result->as<FlatVector<T>>();
+  // auto rawValues = flatResult->mutableRawValues();
   T* srcValues = reinterpret_cast<T*>(data_buffer);
-  memcpy(rawValues, srcValues, num_rows * sizeof(T));
+  // memcpy(rawValues, srcValues, num_rows * sizeof(T));
   for (auto pos = 0; pos < num_rows; pos++) {
     if (std::is_integral<T>::value) {
       if (srcValues[pos] == inline_int_null_value<T>()) {
@@ -222,7 +265,8 @@ VectorPtr toVeloxImpl<TypeKind::BOOLEAN>(
     const TypePtr& vType,
     int8_t* data_buffer,
     int num_rows,
-    memory::MemoryPool* pool) {
+    memory::MemoryPool* pool,
+    int32_t /*unused*/) {
   auto result = BaseVector::create(vType, num_rows, pool);
   auto flatResult = result->as<FlatVector<bool>>();
   auto rawValues = flatResult->mutableRawValues<uint64_t>();
@@ -241,7 +285,8 @@ VectorPtr toVeloxImpl<TypeKind::VARCHAR>(
     const TypePtr& vType,
     int8_t* data_buffer,
     int num_rows,
-    memory::MemoryPool* pool) {
+    memory::MemoryPool* pool,
+    int32_t /*unused*/) {
   VELOX_NYI(" {} conversion is not supported yet");
 }
 
@@ -250,8 +295,24 @@ VectorPtr toVeloxImpl<TypeKind::VARBINARY>(
     const TypePtr& vType,
     int8_t* data_buffer,
     int num_rows,
-    memory::MemoryPool* pool) {
+    memory::MemoryPool* pool,
+    int32_t /*unused*/) {
   VELOX_NYI(" {} conversion is not supported yet");
+}
+
+std::tuple<int64_t, int64_t> calculateScale(int32_t dimen) {
+  switch (dimen) {
+    case CIDER_DIMEN::SECOND:
+      return {kSecsPerSec, kNanoSecsPerSec};
+    case CIDER_DIMEN::MILLISECOND:
+      return {kMilliSecsPerSec, kMicroSecsPerSec};
+    case CIDER_DIMEN::MICROSECOND:
+      return {kMicroSecsPerSec, kMilliSecsPerSec};
+    case CIDER_DIMEN::NANOSECOND:
+      return {kNanoSecsPerSec, kSecsPerSec};
+    default:
+      VELOX_UNREACHABLE("Unknown dimension");
+  }
 }
 
 template <>
@@ -259,28 +320,21 @@ VectorPtr toVeloxImpl<TypeKind::TIMESTAMP>(
     const TypePtr& vType,
     int8_t* data_buffer,
     int num_rows,
-    memory::MemoryPool* pool) {
-  VELOX_NYI(" {} conversion is not supported yet");
-}
-
-VectorPtr toVeloxImplTS(
-    const TypePtr& vType,
-    int8_t* data_buffer,
-    int num_rows,
-    memory::MemoryPool* pool) {
+    memory::MemoryPool* pool,
+    int32_t dimen) {
   auto result = BaseVector::create(vType, num_rows, pool);
   auto flatResult = result->as<FlatVector<Timestamp>>();
-  auto rawValues = flatResult->mutableRawValues();
   int64_t* srcValues = reinterpret_cast<int64_t*>(data_buffer);
+  auto [scaleSecond, scaleNano] = calculateScale(dimen);
   for (auto pos = 0; pos < num_rows; pos++) {
     if (srcValues[pos] == std::numeric_limits<int64_t>::min()) {
       result->setNull(pos, true);
     } else {
-      auto microseconds = srcValues[pos];
-      // TODO: need to get precision info from omnisci
+      auto timeValue = srcValues[pos];
       flatResult->set(
           pos,
-          Timestamp(microseconds / 1000000, (microseconds % 1000000) * 1000));
+          Timestamp(
+              timeValue / scaleSecond, (timeValue % scaleSecond) * scaleNano));
     }
   }
   return result;
@@ -290,22 +344,23 @@ VectorPtr toVeloxVector(
     const TypePtr& vType,
     int8_t* data_buffer,
     int num_rows,
-    memory::MemoryPool* pool) {
+    memory::MemoryPool* pool,
+    int32_t dimen) {
   return VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH(
-      toVeloxImpl, vType->kind(), vType, data_buffer, num_rows, pool);
+      toVeloxImpl, vType->kind(), vType, data_buffer, num_rows, pool, dimen);
 }
 
 RowVectorPtr RawDataConvertor::convertToRowVector(
     int8_t** col_buffer,
     std::vector<std::string> col_names,
     std::vector<std::string> col_types,
+    std::vector<int32_t> dimens,
     int num_rows,
     memory::MemoryPool* pool) {
   std::shared_ptr<const RowType> rowType;
   std::vector<VectorPtr> columns;
 
   // get row type from cider result
-  // TODO: may need to pass SQLTypeInfo from cider
   std::vector<TypePtr> types;
   int num_cols = col_types.size();
   types.reserve(num_cols);
@@ -316,7 +371,8 @@ RowVectorPtr RawDataConvertor::convertToRowVector(
   // convert col buffer to vector ptr
   columns.reserve(num_cols);
   for (int i = 0; i < num_cols; i++) {
-    columns.push_back(toVeloxVector(types[i], col_buffer[i], num_rows, pool));
+    columns.push_back(
+        toVeloxVector(types[i], col_buffer[i], num_rows, pool, dimens[i]));
   }
   rowType = std::make_shared<RowType>(move(col_names), move(types));
   return std::make_shared<RowVector>(

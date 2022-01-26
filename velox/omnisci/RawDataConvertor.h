@@ -33,6 +33,7 @@ class RawDataConvertor : public DataConvertor {
       int8_t** col_buffer,
       std::vector<std::string> col_names,
       std::vector<std::string> col_types,
+      std::vector<int32_t> dimens,
       int num_rows,
       memory::MemoryPool* pool) override;
 };
