@@ -206,6 +206,11 @@ TypePtr getVeloxType(std::string typeName) {
     VELOX_NYI(" {} conversion is not supported yet", typeName);
 }
 
+struct BufferReleaser {
+  void addRef() const {}
+  void release() const {}
+};
+
 template <TypeKind kind>
 VectorPtr toVeloxImpl(
     const TypePtr& vType,
@@ -214,11 +219,27 @@ VectorPtr toVeloxImpl(
     memory::MemoryPool* pool,
     int32_t /*unused*/) {
   using T = typename TypeTraits<kind>::NativeType;
-  auto result = BaseVector::create(vType, num_rows, pool);
-  auto flatResult = result->as<FlatVector<T>>();
-  auto rawValues = flatResult->mutableRawValues();
+  BufferReleaser releaser;
+  BufferPtr buffer = BufferView<BufferReleaser&>::create(
+      reinterpret_cast<const uint8_t*>(data_buffer),
+      num_rows * vType->cppSizeInBytes(),
+      releaser);
+  auto result = std::make_shared<FlatVector<T>>(
+      pool,
+      vType,
+      BufferPtr(nullptr),
+      num_rows,
+      buffer,
+      std::vector<BufferPtr>(),
+      cdvi::EMPTY_METADATA,
+      std::nullopt,
+      0);
+
+  // auto result = BaseVector::create(vType, num_rows, pool);
+  // auto flatResult = result->as<FlatVector<T>>();
+  // auto rawValues = flatResult->mutableRawValues();
   T* srcValues = reinterpret_cast<T*>(data_buffer);
-  memcpy(rawValues, srcValues, num_rows * sizeof(T));
+  // memcpy(rawValues, srcValues, num_rows * sizeof(T));
   for (auto pos = 0; pos < num_rows; pos++) {
     if (std::is_integral<T>::value) {
       if (srcValues[pos] == inline_int_null_value<T>()) {
