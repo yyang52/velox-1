@@ -15,7 +15,6 @@
 #include "velox/vector/FlatVector.h"
 
 namespace facebook::velox::cider {
-
 template <TypeKind kind>
 void toCiderImpl(
     VectorPtr& child,

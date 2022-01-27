@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "velox/omnisci/DataConvertor.h"
+#include "velox/vector/arrow/Bridge.h"
 
 namespace facebook::velox::cider {
 class ArrowDataConvertor : public DataConvertor {
