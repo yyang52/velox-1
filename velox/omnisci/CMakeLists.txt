@@ -11,7 +11,7 @@
 # limitations under the License.
 add_library(data_convert DataConvertor.cpp RawDataConvertor.cpp ArrowDataConvertor.cpp)
 
-target_link_libraries(data_convert velox_vector) 
+target_link_libraries(data_convert velox_vector velox_arrow_bridge) 
 
 if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)

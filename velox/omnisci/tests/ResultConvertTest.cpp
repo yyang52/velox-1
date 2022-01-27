@@ -192,13 +192,69 @@ TEST_F(ResultConvertTest, directToCiderTimestampOneCol) {
   testToCiderDirect<Timestamp>(rowVector, data, numRows);
 }
 
-TEST_F(ResultConvertTest, VeloxToCiderArrowConvert) {
+template <typename T>
+void testToCiderWithArrow(
+    RowVectorPtr rowVector,
+    const std::vector<std::optional<T>>& data,
+    int numRows) {
   std::shared_ptr<DataConvertor> convertor =
       DataConvertor::create(CONVERT_TYPE::ARROW);
-  RowVectorPtr input;
-  int num_rows;
-  // CiderResultSet crs = convertor->convertToCider(input, num_rows);
-  // CHECK EQUAL
+  CiderResultSet crs = convertor->convertToCider(rowVector, numRows, nullptr);
+  EXPECT_EQ(numRows, crs.numRows);
+
+  int8_t** colBuffer = crs.colBuffer;
+  T* col_0 = reinterpret_cast<T*>(colBuffer[0]);
+  for (auto idx = 0; idx < numRows; idx++) {
+    if (data[idx] == std::nullopt) {
+      if (std::is_integral<T>::value) {
+        EXPECT_EQ(inline_int_null_value<T>(), col_0[idx]);
+      } else if (std::is_same<T, float>::value) {
+        EXPECT_EQ(FLT_MIN, col_0[idx]);
+      } else if (std::is_same<T, double>::value) {
+        EXPECT_EQ(DBL_MIN, col_0[idx]);
+      } else {
+        VELOX_NYI("Conversion is not supported yet");
+      }
+    } else {
+      EXPECT_EQ(data[idx], col_0[idx]);
+    }
+  }
+}
+
+TEST_F(ResultConvertTest, toCiderIntegerOneColArrow) {
+  int numRows = 10;
+  std::vector<std::optional<int32_t>> data = {
+      0, std::nullopt, 1, 3, std::nullopt, -1234, -99, -999, 1000, -1};
+  auto col = makeNullableFlatVector<int32_t>(data);
+  auto rowVector = makeRowVector({col});
+  testToCiderWithArrow<int32_t>(rowVector, data, numRows);
+}
+
+TEST_F(ResultConvertTest, toCiderBigintOneColArrow) {
+  int numRows = 10;
+  std::vector<std::optional<int64_t>> data = {
+      0, 1, std::nullopt, 3, 1024, -123456, -99, -999, std::nullopt, -1};
+  auto col = makeNullableFlatVector<int64_t>(data);
+  auto rowVector = makeRowVector({col});
+  testToCiderWithArrow<int64_t>(rowVector, data, numRows);
+}
+
+TEST_F(ResultConvertTest, toCiderDoubleOneColArrow) {
+  int numRows = 10;
+  std::vector<std::optional<double>> data = {
+      0.5,
+      1,
+      std::nullopt,
+      3.14,
+      1024,
+      -123456,
+      -99.99,
+      -999,
+      std::nullopt,
+      -1};
+  auto col = makeNullableFlatVector<double>(data);
+  auto rowVector = makeRowVector({col});
+  testToCiderWithArrow<double>(rowVector, data, numRows);
 }
 
 template <typename T>

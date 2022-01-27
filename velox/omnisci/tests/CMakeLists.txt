@@ -16,6 +16,6 @@ add_test(cider_data_convert_test cider_data_convert_test)
 target_link_libraries(
   cider_data_convert_test
   velox_vector_test_lib
-  data_convert
+  data_convert  
   ${GTEST_BOTH_LIBRARIES}
 )
