@@ -470,11 +470,111 @@ TEST_F(ResultConvertTest, directToVeloxTimestampOneCol) {
   std::free(col_buffer);
 }
 
-TEST_F(ResultConvertTest, CiderToVeloxArrowConvert) {
+template <typename T>
+void testToVeloxWithArrow(
+    int8_t** col_buffer,
+    std::vector<std::string> col_names,
+    std::vector<std::string> col_types,
+    std::vector<int32_t> dimens,
+    memory::MemoryPool* pool,
+    int num_rows) {
   std::shared_ptr<DataConvertor> convertor =
       DataConvertor::create(CONVERT_TYPE::ARROW);
-  int8_t** col_buffer;
-  int num_rows;
-  // RowVectorPtr rvp = convertor->convertToRowVector(col_buffer, num_rows);
-  // CHECK EQUAL
+  RowVectorPtr rvp = convertor->convertToRowVector(
+      col_buffer, col_names, col_types, dimens, num_rows, pool);
+  RowVector* row = rvp.get();
+  auto* rowVector = row->as<RowVector>();
+  EXPECT_EQ(1, rowVector->childrenSize());
+  VectorPtr& child_0 = rowVector->childAt(0);
+  EXPECT_TRUE(child_0->mayHaveNulls());
+  auto childVal_0 = child_0->asFlatVector<T>();
+  auto* rawValues_0 = childVal_0->mutableRawValues();
+  auto nulls_0 = child_0->rawNulls();
+  T* col_0 = reinterpret_cast<T*>(col_buffer[0]);
+  for (auto idx = 0; idx < num_rows; idx++) {
+    if (std::is_integral<T>::value) {
+      if (col_0[idx] == inline_int_null_value<T>()) {
+        EXPECT_TRUE(bits::isBitNull(nulls_0, idx));
+      } else {
+        EXPECT_EQ(rawValues_0[idx], col_0[idx]);
+      }
+    } else if (std::is_same<T, float>::value) {
+      if (col_0[idx] == FLT_MIN) {
+        EXPECT_TRUE(bits::isBitNull(nulls_0, idx));
+      } else {
+        EXPECT_EQ(rawValues_0[idx], col_0[idx]);
+      }
+    } else if (std::is_same<T, double>::value) {
+      if (col_0[idx] == DBL_MIN) {
+        EXPECT_TRUE(bits::isBitNull(nulls_0, idx));
+      } else {
+        EXPECT_EQ(rawValues_0[idx], col_0[idx]);
+      }
+    } else {
+      VELOX_NYI("Conversion is not supported yet");
+    }
+  }
+}
+
+TEST_F(ResultConvertTest, toVeloxIntegerOneColArrow) {
+  int8_t** col_buffer = (int8_t**)std::malloc(sizeof(int8_t*));
+  int32_t* col_0 = (int32_t*)std::malloc(sizeof(int32_t) * 10);
+  int num_rows = 10;
+  for (int i = 0; i < num_rows; i++) {
+    col_0[i] = i;
+  }
+  for (int i = 3; i < num_rows; i += 3) {
+    col_0[i] = inline_int_null_value<int32_t>();
+  }
+  col_buffer[0] = reinterpret_cast<int8_t*>(col_0);
+
+  std::vector<std::string> col_names = {"col_0"};
+  std::vector<std::string> col_types = {"INT"};
+  std::vector<int32_t> dimens = {0};
+  testToVeloxWithArrow<int32_t>(
+      col_buffer, col_names, col_types, dimens, pool_.get(), num_rows);
+  std::free(col_buffer[0]);
+  std::free(col_buffer);
+}
+
+TEST_F(ResultConvertTest, toVeloxBigintOneColArrow) {
+  int8_t** col_buffer = (int8_t**)std::malloc(sizeof(int8_t*));
+  int64_t* col_0 = (int64_t*)std::malloc(sizeof(int64_t) * 10);
+  int num_rows = 10;
+  for (int i = 0; i < num_rows; i++) {
+    col_0[i] = i * 123;
+  }
+  for (int i = 3; i < num_rows; i += 3) {
+    col_0[i] = inline_int_null_value<int64_t>();
+  }
+  col_buffer[0] = reinterpret_cast<int8_t*>(col_0);
+
+  std::vector<std::string> col_names = {"col_0"};
+  std::vector<std::string> col_types = {"BIGINT"};
+  std::vector<int32_t> dimens = {0};
+  testToVeloxWithArrow<int64_t>(
+      col_buffer, col_names, col_types, dimens, pool_.get(), num_rows);
+  std::free(col_buffer[0]);
+  std::free(col_buffer);
+}
+
+TEST_F(ResultConvertTest, toVeloxDoubleOneColArrow) {
+  int8_t** col_buffer = (int8_t**)std::malloc(sizeof(int8_t*));
+  double* col_0 = (double*)std::malloc(sizeof(double) * 10);
+  int num_rows = 10;
+  for (int i = 0; i < num_rows; i++) {
+    col_0[i] = i * 3.14;
+  }
+  for (int i = 3; i < num_rows; i += 3) {
+    col_0[i] = DBL_MIN;
+  }
+  col_buffer[0] = reinterpret_cast<int8_t*>(col_0);
+
+  std::vector<std::string> col_names = {"col_0"};
+  std::vector<std::string> col_types = {"DOUBLE"};
+  std::vector<int32_t> dimens = {0};
+  testToVeloxWithArrow<double>(
+      col_buffer, col_names, col_types, dimens, pool_.get(), num_rows);
+  std::free(col_buffer[0]);
+  std::free(col_buffer);
 }

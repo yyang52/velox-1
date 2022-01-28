@@ -136,6 +136,159 @@ CiderResultSet ArrowDataConvertor::convertToCider(
   return CiderResultSet(col_buffer, num_rows);
 };
 
+const char* getArrowFormat(std::string typeName) {
+  if (typeName == "BOOL")
+    return "b";
+  if (typeName == "TINYINT")
+    return "c";
+  if (typeName == "SMALLINT")
+    return "s";
+  if (typeName == "INT")
+    return "i";
+  if (typeName == "BIGINT" || typeName == "DECIMAL")
+    return "l";
+  if (typeName == "FLOAT")
+    return "f";
+  if (typeName == "DOUBLE")
+    return "g";
+  if (typeName == "VARCHAR") {
+    return "u";
+  }
+  if (typeName == "TIMESTAMP")
+    // map to ttn for now
+    return "ttn";
+  else
+    VELOX_NYI(" {} conversion is not supported yet", typeName);
+}
+
+ArrowSchema makeArrowSchema(const char* format) {
+  return ArrowSchema{
+      .format = format,
+      .name = nullptr,
+      .metadata = nullptr,
+      .flags = 0,
+      .n_children = 0,
+      .children = nullptr,
+      .dictionary = nullptr,
+      .release = nullptr,
+      .private_data = nullptr,
+  };
+}
+
+ArrowArray
+makeArrowArray(int64_t length, int64_t nullCount, const void** buffers) {
+  return ArrowArray{
+      .length = length,
+      .null_count = nullCount,
+      .offset = 0,
+      .n_buffers = 2,
+      .n_children = 0,
+      .buffers = buffers,
+      .children = nullptr,
+      .dictionary = nullptr,
+      .release = nullptr,
+      .private_data = nullptr,
+  };
+}
+
+template <TypeKind kind>
+VectorPtr toVeloxWithArrowImpl(
+    const ArrowSchema& arrowSchema,
+    int8_t* data_buffer,
+    int num_rows,
+    memory::MemoryPool* pool,
+    int32_t /*unused*/) {
+  using T = typename TypeTraits<kind>::NativeType;
+  int64_t nullCount = 0;
+  BufferPtr nulls = AlignedBuffer::allocate<uint64_t>(num_rows, pool);
+  auto rawNulls = nulls->asMutable<uint64_t>();
+  T* srcValues = reinterpret_cast<T*>(data_buffer);
+  for (auto pos = 0; pos < num_rows; pos++) {
+    if (std::is_integral<T>::value) {
+      if (srcValues[pos] == inline_int_null_value<T>()) {
+        bits::setNull(rawNulls, pos);
+        nullCount++;
+      }
+    } else if (std::is_same<T, float>::value) {
+      if (srcValues[pos] == FLT_MIN) {
+        bits::setNull(rawNulls, pos);
+        nullCount++;
+      }
+    } else if (std::is_same<T, double>::value) {
+      if (srcValues[pos] == DBL_MIN) {
+        bits::setNull(rawNulls, pos);
+        nullCount++;
+      }
+    } else {
+      VELOX_NYI("Conversion is not supported yet");
+    }
+  }
+
+  const void* buffers[2];
+  buffers[0] = (nullCount == 0) ? nullptr : (const void*)rawNulls;
+  buffers[1] = (num_rows == 0) ? nullptr : (const void*)srcValues;
+  ArrowArray arrowArray = makeArrowArray(num_rows, nullCount, buffers);
+  auto result = importFromArrow(arrowSchema, arrowArray, pool);
+  return result;
+}
+
+template <>
+VectorPtr toVeloxWithArrowImpl<TypeKind::BOOLEAN>(
+    const ArrowSchema& arrowSchema,
+    int8_t* data_buffer,
+    int num_rows,
+    memory::MemoryPool* pool,
+    int32_t /*unused*/) {
+  VELOX_NYI(" {} conversion is not supported yet");
+}
+
+template <>
+VectorPtr toVeloxWithArrowImpl<TypeKind::VARCHAR>(
+    const ArrowSchema& arrowSchema,
+    int8_t* data_buffer,
+    int num_rows,
+    memory::MemoryPool* pool,
+    int32_t /*unused*/) {
+  VELOX_NYI(" {} conversion is not supported yet");
+}
+
+template <>
+VectorPtr toVeloxWithArrowImpl<TypeKind::VARBINARY>(
+    const ArrowSchema& arrowSchema,
+    int8_t* data_buffer,
+    int num_rows,
+    memory::MemoryPool* pool,
+    int32_t /*unused*/) {
+  VELOX_NYI(" {} conversion is not supported yet");
+}
+
+template <>
+VectorPtr toVeloxWithArrowImpl<TypeKind::TIMESTAMP>(
+    const ArrowSchema& arrowSchema,
+    int8_t* data_buffer,
+    int num_rows,
+    memory::MemoryPool* pool,
+    int32_t /*unused*/) {
+  VELOX_NYI(" {} conversion is not supported yet");
+}
+
+VectorPtr toVeloxVectorWithArrow(
+    const TypePtr& vType,
+    const ArrowSchema& arrowSchema,
+    int8_t* data_buffer,
+    int num_rows,
+    memory::MemoryPool* pool,
+    int32_t dimen) {
+  return VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH(
+      toVeloxWithArrowImpl,
+      vType->kind(),
+      arrowSchema,
+      data_buffer,
+      num_rows,
+      pool,
+      dimen);
+}
+
 RowVectorPtr ArrowDataConvertor::convertToRowVector(
     int8_t** col_buffer,
     std::vector<std::string> col_names,
@@ -143,7 +296,20 @@ RowVectorPtr ArrowDataConvertor::convertToRowVector(
     std::vector<int32_t> dimens,
     int num_rows,
     memory::MemoryPool* pool) {
-  // TODO
-  VELOX_NYI("Arrow conversion not yet supported.");
+  std::shared_ptr<const RowType> rowType;
+  std::vector<VectorPtr> columns;
+  std::vector<TypePtr> types;
+  int num_cols = col_types.size();
+  types.reserve(num_cols);
+  columns.reserve(num_cols);
+  for (int i = 0; i < num_cols; i++) {
+    auto arrowSchema = makeArrowSchema(getArrowFormat(col_types[i]));
+    types.push_back(importFromArrow(arrowSchema));
+    columns.push_back(toVeloxVectorWithArrow(
+        types[i], arrowSchema, col_buffer[i], num_rows, pool, dimens[i]));
+  }
+  rowType = std::make_shared<RowType>(move(col_names), move(types));
+  return std::make_shared<RowVector>(
+      pool, rowType, BufferPtr(nullptr), num_rows, columns);
 };
 } // namespace facebook::velox::cider

@@ -358,18 +358,12 @@ RowVectorPtr RawDataConvertor::convertToRowVector(
     memory::MemoryPool* pool) {
   std::shared_ptr<const RowType> rowType;
   std::vector<VectorPtr> columns;
-
-  // get row type from cider result
   std::vector<TypePtr> types;
   int num_cols = col_types.size();
   types.reserve(num_cols);
-  for (int i = 0; i < num_cols; i++) {
-    types.push_back(getVeloxType(col_types[i]));
-  }
-
-  // convert col buffer to vector ptr
   columns.reserve(num_cols);
   for (int i = 0; i < num_cols; i++) {
+    types.push_back(getVeloxType(col_types[i]));
     columns.push_back(
         toVeloxVector(types[i], col_buffer[i], num_rows, pool, dimens[i]));
   }
