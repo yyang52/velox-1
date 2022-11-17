@@ -69,6 +69,10 @@ target_link_libraries(
   ${TEST_LINK_LIBS})
 
 if(VELOX_ENABLE_ARROW)
+  set(BITPACK_TESTS BitPackDecoderBenchmark.cpp BitUnpackingTest.cpp)
+  set_source_files_properties(
+    ${BITPACK_TESTS}
+    PROPERTIES COMPILE_OPTIONS "-march=native")
   add_executable(velox_dwio_common_bitpack_decoder_benchmark
                  BitPackDecoderBenchmark.cpp)
   target_link_libraries(

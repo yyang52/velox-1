@@ -101,6 +101,12 @@ benchmarks-basic-run:
 	$(MAKE) benchmarks-basic-build
 	scripts/veloxbench/veloxbench/cpp_micro_benchmarks.py --bm_max_secs 10 --bm_max_trials 1000000
 
+benchmarks-unpack:
+	$(MAKE) release EXTRA_CMAKE_FLAGS="-DVELOX_ENABLE_PARQUET=ON -DVELOX_BUILD_TESTING=ON"
+
+benchmarks-debug:
+	$(MAKE) debug EXTRA_CMAKE_FLAGS="-DVELOX_ENABLE_PARQUET=ON -DVELOX_BUILD_TESTING=ON"
+
 unittest: debug			#: Build with debugging and run unit tests
 	cd $(BUILD_BASE_DIR)/debug && ctest -j ${NUM_THREADS} -VV --output-on-failure
 

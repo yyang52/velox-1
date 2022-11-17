@@ -62,3 +62,7 @@ target_link_libraries(
   Boost::regex
   ${FOLLY_WITH_DEPENDENCIES}
   glog::glog)
+
+set_source_files_properties(
+    BitPackDecoder.cpp
+    PROPERTIES COMPILE_OPTIONS "-march=native")

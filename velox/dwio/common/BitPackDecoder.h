@@ -18,11 +18,19 @@
 
 #include "velox/common/base/BitUtil.h"
 #include "velox/common/base/Exceptions.h"
+#include "velox/dwio/common/bit-packing.inline.h"
 #include "velox/vector/TypeAliases.h"
 
 #include <folly/Range.h>
 
+#include <chrono>
+#include <iostream>
+
+// using namespace impala;
+
 namespace facebook::velox::dwio::common {
+
+#define XSIMD_WITH_AVX2 1
 
 using RowSet = folly::Range<const facebook::velox::vector_size_t*>;
 
@@ -148,6 +156,53 @@ inline void unpack<uint32_t>(
     uint64_t numValues,
     uint8_t bitWidth,
     uint32_t* FOLLY_NONNULL& result);
+
+// Bit unpack implementation with avx512 optimization
+template <typename T>
+void unpackAVX512(
+    const uint64_t* FOLLY_NULLABLE bits,
+    int32_t bitOffset,
+    RowSet rows,
+    int32_t rowBias,
+    uint8_t bitWidth,
+    int64_t numBytes,
+    T* FOLLY_NONNULL result);
+
+// template void unpackAVX512(
+//     const uint64_t* bits,
+//     int32_t bitOffset,
+//     RowSet rows,
+//     int32_t rowBias,
+//     uint8_t bitWidth,
+//     int64_t numBytes,
+//     uint8_t* result);
+
+// template void unpackAVX512(
+//     const uint64_t* bits,
+//     int32_t bitOffset,
+//     RowSet rows,
+//     int32_t rowBias,
+//     uint8_t bitWidth,
+//     int64_t numBytes,
+//     uint16_t* result);
+
+// template void unpackAVX512(
+//     const uint64_t* bits,
+//     int32_t bitOffset,
+//     RowSet rows,
+//     int32_t rowBias,
+//     uint8_t bitWidth,
+//     int64_t numBytes,
+//     uint32_t* result);
+
+// template void unpackAVX512(
+//     const uint64_t* bits,
+//     int32_t bitOffset,
+//     RowSet rows,
+//     int32_t rowBias,
+//     uint8_t bitWidth,
+//     int64_t numBytes,
+//     uint64_t* result);
 
 // The function definitions are put here to make sure they are inlined. Moving
 // them to the .cpp file may result in 10x regression.
@@ -781,6 +836,705 @@ inline uint64_t safeLoadBits(
   return facebook::velox::bits::loadPartialWord(
              reinterpret_cast<const uint8_t*>(ptr), byteWidth) >>
       bitOffset;
+}
+
+// static inline void unpack1to4AVX512(
+//     uint8_t bitWidth,
+//     const uint8_t* FOLLY_NONNULL& in,
+//     uint64_t values_to_read,
+//     uint16_t* FOLLY_NONNULL& out_pos) {
+//   constexpr int BATCH_SIZE = 16;
+//   const int64_t batches_to_read = values_to_read / BATCH_SIZE;
+//   const int64_t remainder_values = values_to_read % BATCH_SIZE;
+//   const uint8_t* in_pos = in;
+//   const uint64_t* in64_pos = reinterpret_cast<const uint64_t*>(in);
+
+//   __m512i am = _mm512_set_epi32(
+//       60, 56, 52, 48, 44, 40, 36, 32, 28, 24, 20, 16, 12, 8, 4, 0);
+//   __m512i mask = _mm512_set1_epi32(0x0000000f);
+//   // First unpack as many full batches as possible.
+//   for (int64_t i = 0; i < batches_to_read; ++i) {
+//     __m512i data = _mm512_set1_epi64(in64_pos[i]);
+//     __m512i cm = _mm512_multishift_epi64_epi8(am, data);
+//     cm = _mm512_and_epi32(cm, mask);
+//     _mm512_storeu_epi8(out_pos, cm);
+//     out_pos += BATCH_SIZE;
+//     // in_bytes -= (BATCH_SIZE * 4) / CHAR_BIT;
+//     in_pos += 8;
+//   }
+
+//   // if (remainder_values > 0) {
+//   //   in_pos = UnpackUpTo31Values<OutType, 4>(
+//   //       in_pos, in_bytes, remainder_values, out_pos);
+//   // }
+// }
+
+// static inline void unpack1to4AVX512(
+//     uint8_t bitWidth,
+//     const uint8_t* FOLLY_NONNULL& src_ptr,
+//     uint64_t values_to_read,
+//     uint16_t* FOLLY_NONNULL& dst_ptr) {
+//   uint64_t bit_mask = 0x0f0f0f0f0f0f0f0fLLU;
+//   uint32_t i;
+//   uint8_t mask = OWN_4_BIT_MASK;
+
+//   if (values_to_read >= 64u) {
+//     __mmask64 read_mask = OWN_MAX_32U; // first 32 bytes (64 elements)
+//     __m512i parse_mask =
+//         _mm512_set1_epi16(0x0F0F); // 4 times 1 then (8 - 4) times 0
+//     while (values_to_read >= 64u) {
+//       __m512i srcmm0, srcmm1, tmpmm;
+
+//       srcmm0 = _mm512_maskz_loadu_epi8(read_mask, src_ptr);
+//       srcmm1 = _mm512_srli_epi16(srcmm0, 4u);
+
+//       // move elements into their places
+//       // srcmm0: a c e g 0 0 0 0
+//       // srcmm1: b d f h 0 0 0 0
+//       tmpmm = _mm512_unpacklo_epi8(srcmm0, srcmm1); // ab ef 00 00
+//       srcmm0 = _mm512_unpackhi_epi8(srcmm0, srcmm1); // cd gh 00 00
+//       srcmm0 = _mm512_shuffle_i64x2(tmpmm, srcmm0, 0x44); // ab ef cd gh
+//       srcmm0 = _mm512_shuffle_i64x2(srcmm0, srcmm0, 0xD8); // ab cd ef gh
+
+//       // turn 4 bit_width into 8 by zeroing 4 of each 8 bits.
+//       srcmm0 = _mm512_and_si512(srcmm0, parse_mask);
+//       extend_8u16u(srcmm0, dst_ptr);
+
+//       src_ptr += 8u * 4u;
+//       dst_ptr += 64u;
+//       values_to_read -= 64u;
+//     }
+//   }
+//   if (values_to_read > 32u) {
+//     bit_byte_pool64_t bit_byte_pool;
+//     uint64_t* tmp_src = (uint64_t*)src_ptr;
+//     uint64_t src = *tmp_src;
+
+//     bit_byte_pool.bit_buf = src & bit_mask;
+//     dst_ptr[0] = (uint16_t)bit_byte_pool.byte_buf[0];
+//     dst_ptr[2] = (uint16_t)bit_byte_pool.byte_buf[1];
+//     dst_ptr[4] = (uint16_t)bit_byte_pool.byte_buf[2];
+//     dst_ptr[6] = (uint16_t)bit_byte_pool.byte_buf[3];
+//     dst_ptr[8] = (uint16_t)bit_byte_pool.byte_buf[4];
+//     dst_ptr[10] = (uint16_t)bit_byte_pool.byte_buf[5];
+//     dst_ptr[12] = (uint16_t)bit_byte_pool.byte_buf[6];
+//     dst_ptr[14] = (uint16_t)bit_byte_pool.byte_buf[7];
+//     bit_byte_pool.bit_buf = (src >> 4u) & bit_mask;
+//     dst_ptr[1] = (uint16_t)bit_byte_pool.byte_buf[0];
+//     dst_ptr[3] = (uint16_t)bit_byte_pool.byte_buf[1];
+//     dst_ptr[5] = (uint16_t)bit_byte_pool.byte_buf[2];
+//     dst_ptr[7] = (uint16_t)bit_byte_pool.byte_buf[3];
+//     dst_ptr[9] = (uint16_t)bit_byte_pool.byte_buf[4];
+//     dst_ptr[11] = (uint16_t)bit_byte_pool.byte_buf[5];
+//     dst_ptr[13] = (uint16_t)bit_byte_pool.byte_buf[6];
+//     dst_ptr[15] = (uint16_t)bit_byte_pool.byte_buf[7];
+//     tmp_src++;
+//     dst_ptr += 16u;
+//     src = *tmp_src;
+//     bit_byte_pool.bit_buf = src & bit_mask;
+//     dst_ptr[0] = (uint16_t)bit_byte_pool.byte_buf[0];
+//     dst_ptr[2] = (uint16_t)bit_byte_pool.byte_buf[1];
+//     dst_ptr[4] = (uint16_t)bit_byte_pool.byte_buf[2];
+//     dst_ptr[6] = (uint16_t)bit_byte_pool.byte_buf[3];
+//     dst_ptr[8] = (uint16_t)bit_byte_pool.byte_buf[4];
+//     dst_ptr[10] = (uint16_t)bit_byte_pool.byte_buf[5];
+//     dst_ptr[12] = (uint16_t)bit_byte_pool.byte_buf[6];
+//     dst_ptr[14] = (uint16_t)bit_byte_pool.byte_buf[7];
+//     bit_byte_pool.bit_buf = (src >> 4u) & bit_mask;
+//     dst_ptr[1] = (uint16_t)bit_byte_pool.byte_buf[0];
+//     dst_ptr[3] = (uint16_t)bit_byte_pool.byte_buf[1];
+//     dst_ptr[5] = (uint16_t)bit_byte_pool.byte_buf[2];
+//     dst_ptr[7] = (uint16_t)bit_byte_pool.byte_buf[3];
+//     dst_ptr[9] = (uint16_t)bit_byte_pool.byte_buf[4];
+//     dst_ptr[11] = (uint16_t)bit_byte_pool.byte_buf[5];
+//     dst_ptr[13] = (uint16_t)bit_byte_pool.byte_buf[6];
+//     dst_ptr[15] = (uint16_t)bit_byte_pool.byte_buf[7];
+//     values_to_read -= 32u;
+//     dst_ptr += 16u;
+//     src_ptr += 16u;
+//   }
+//   if (values_to_read > 16u) {
+//     bit_byte_pool64_t bit_byte_pool;
+//     uint64_t* tmp_src = (uint64_t*)src_ptr;
+//     uint64_t src = *tmp_src;
+
+//     bit_byte_pool.bit_buf = src & bit_mask;
+//     dst_ptr[0] = (uint16_t)bit_byte_pool.byte_buf[0];
+//     dst_ptr[2] = (uint16_t)bit_byte_pool.byte_buf[1];
+//     dst_ptr[4] = (uint16_t)bit_byte_pool.byte_buf[2];
+//     dst_ptr[6] = (uint16_t)bit_byte_pool.byte_buf[3];
+//     dst_ptr[8] = (uint16_t)bit_byte_pool.byte_buf[4];
+//     dst_ptr[10] = (uint16_t)bit_byte_pool.byte_buf[5];
+//     dst_ptr[12] = (uint16_t)bit_byte_pool.byte_buf[6];
+//     dst_ptr[14] = (uint16_t)bit_byte_pool.byte_buf[7];
+//     bit_byte_pool.bit_buf = (src >> 4u) & bit_mask;
+//     dst_ptr[1] = (uint16_t)bit_byte_pool.byte_buf[0];
+//     dst_ptr[3] = (uint16_t)bit_byte_pool.byte_buf[1];
+//     dst_ptr[5] = (uint16_t)bit_byte_pool.byte_buf[2];
+//     dst_ptr[7] = (uint16_t)bit_byte_pool.byte_buf[3];
+//     dst_ptr[9] = (uint16_t)bit_byte_pool.byte_buf[4];
+//     dst_ptr[11] = (uint16_t)bit_byte_pool.byte_buf[5];
+//     dst_ptr[13] = (uint16_t)bit_byte_pool.byte_buf[6];
+//     dst_ptr[15] = (uint16_t)bit_byte_pool.byte_buf[7];
+//     dst_ptr += 16u;
+//     values_to_read -= 16u;
+//     src_ptr += 8u;
+//   }
+//   if (values_to_read > 8u) {
+//     bit_byte_pool32_t bit_byte_pool;
+//     uint32_t* tmp_src = (uint32_t*)src_ptr;
+//     uint32_t src = *tmp_src;
+
+//     bit_byte_pool.bit_buf = src & (uint32_t)bit_mask;
+//     dst_ptr[0] = (uint16_t)bit_byte_pool.byte_buf[0];
+//     dst_ptr[2] = (uint16_t)bit_byte_pool.byte_buf[1];
+//     dst_ptr[4] = (uint16_t)bit_byte_pool.byte_buf[2];
+//     dst_ptr[6] = (uint16_t)bit_byte_pool.byte_buf[3];
+//     bit_byte_pool.bit_buf = (src >> 4u) & (uint32_t)bit_mask;
+//     dst_ptr[1] = (uint16_t)bit_byte_pool.byte_buf[0];
+//     dst_ptr[3] = (uint16_t)bit_byte_pool.byte_buf[1];
+//     dst_ptr[5] = (uint16_t)bit_byte_pool.byte_buf[2];
+//     dst_ptr[7] = (uint16_t)bit_byte_pool.byte_buf[3];
+
+//     src_ptr += sizeof(uint32_t);
+//     dst_ptr += 8u;
+//     values_to_read -= 8u;
+//   }
+
+//   uint8_t src;
+
+//   if (values_to_read > 0) {
+//     src = *src_ptr;
+//     i = 0u;
+//     while (values_to_read >= 2u) {
+//       src = *src_ptr;
+//       dst_ptr[i] = (uint16_t)(src & mask);
+//       src = src >> 4u;
+//       dst_ptr[i + 1] = (uint16_t)(src & mask);
+//       ++src_ptr;
+
+//       values_to_read -= 2u;
+//       i += 2u;
+//     }
+//   }
+
+//   if (values_to_read > 0) {
+//     src = *src_ptr;
+//     dst_ptr[i] = (uint16_t)(src & mask);
+//   }
+//   // return src_ptr;
+// }
+
+// static inline void unpack1to4AVX512(
+//     uint8_t bitWidth,
+//     const uint8_t* FOLLY_NONNULL& inputBuffer,
+//     uint64_t numValues,
+//     uint32_t* FOLLY_NONNULL& outputBuffer) {
+//   for (int i = 0; i < numValues / 512; i++) {
+//     /* we are going to access  4 512-bit words */
+//     __m512i w0, w1;
+//     __m512i* out = (__m512i*)outputBuffer;
+//     const __m512i mask = _mm512_set1_epi32(15);
+//     const __m512i* compressed = reinterpret_cast<const
+//     __m512i*>(inputBuffer); w0 = _mm512_loadu_si512(compressed);
+//     _mm512_storeu_si512(out + 0, _mm512_and_si512(mask, w0));
+//     _mm512_storeu_si512(
+//         out + 1, _mm512_and_si512(mask, _mm512_srli_epi32(w0, 4)));
+//     _mm512_storeu_si512(
+//         out + 2, _mm512_and_si512(mask, _mm512_srli_epi32(w0, 8)));
+//     _mm512_storeu_si512(
+//         out + 3, _mm512_and_si512(mask, _mm512_srli_epi32(w0, 12)));
+//     _mm512_storeu_si512(
+//         out + 4, _mm512_and_si512(mask, _mm512_srli_epi32(w0, 16)));
+//     _mm512_storeu_si512(
+//         out + 5, _mm512_and_si512(mask, _mm512_srli_epi32(w0, 20)));
+//     _mm512_storeu_si512(
+//         out + 6, _mm512_and_si512(mask, _mm512_srli_epi32(w0, 24)));
+//     _mm512_storeu_si512(out + 7, _mm512_srli_epi32(w0, 28));
+//     w1 = _mm512_loadu_si512(compressed + 1);
+//     _mm512_storeu_si512(out + 8, _mm512_and_si512(mask, w1));
+//     _mm512_storeu_si512(
+//         out + 9, _mm512_and_si512(mask, _mm512_srli_epi32(w1, 4)));
+//     _mm512_storeu_si512(
+//         out + 10, _mm512_and_si512(mask, _mm512_srli_epi32(w1, 8)));
+//     _mm512_storeu_si512(
+//         out + 11, _mm512_and_si512(mask, _mm512_srli_epi32(w1, 12)));
+//     _mm512_storeu_si512(
+//         out + 12, _mm512_and_si512(mask, _mm512_srli_epi32(w1, 16)));
+//     _mm512_storeu_si512(
+//         out + 13, _mm512_and_si512(mask, _mm512_srli_epi32(w1, 20)));
+//     _mm512_storeu_si512(
+//         out + 14, _mm512_and_si512(mask, _mm512_srli_epi32(w1, 24)));
+//     _mm512_storeu_si512(out + 15, _mm512_srli_epi32(w1, 28));
+//     w0 = _mm512_loadu_si512(compressed + 2);
+//     _mm512_storeu_si512(out + 16, _mm512_and_si512(mask, w0));
+//     _mm512_storeu_si512(
+//         out + 17, _mm512_and_si512(mask, _mm512_srli_epi32(w0, 4)));
+//     _mm512_storeu_si512(
+//         out + 18, _mm512_and_si512(mask, _mm512_srli_epi32(w0, 8)));
+//     _mm512_storeu_si512(
+//         out + 19, _mm512_and_si512(mask, _mm512_srli_epi32(w0, 12)));
+//     _mm512_storeu_si512(
+//         out + 20, _mm512_and_si512(mask, _mm512_srli_epi32(w0, 16)));
+//     _mm512_storeu_si512(
+//         out + 21, _mm512_and_si512(mask, _mm512_srli_epi32(w0, 20)));
+//     _mm512_storeu_si512(
+//         out + 22, _mm512_and_si512(mask, _mm512_srli_epi32(w0, 24)));
+//     _mm512_storeu_si512(out + 23, _mm512_srli_epi32(w0, 28));
+//     w1 = _mm512_loadu_si512(compressed + 3);
+//     _mm512_storeu_si512(out + 24, _mm512_and_si512(mask, w1));
+//     _mm512_storeu_si512(
+//         out + 25, _mm512_and_si512(mask, _mm512_srli_epi32(w1, 4)));
+//     _mm512_storeu_si512(
+//         out + 26, _mm512_and_si512(mask, _mm512_srli_epi32(w1, 8)));
+//     _mm512_storeu_si512(
+//         out + 27, _mm512_and_si512(mask, _mm512_srli_epi32(w1, 12)));
+//     _mm512_storeu_si512(
+//         out + 28, _mm512_and_si512(mask, _mm512_srli_epi32(w1, 16)));
+//     _mm512_storeu_si512(
+//         out + 29, _mm512_and_si512(mask, _mm512_srli_epi32(w1, 20)));
+//     _mm512_storeu_si512(
+//         out + 30, _mm512_and_si512(mask, _mm512_srli_epi32(w1, 24)));
+//     _mm512_storeu_si512(out + 31, _mm512_srli_epi32(w1, 28));
+
+//     inputBuffer += 256;
+//     outputBuffer += 512;
+//   }
+// }
+
+// numValues number of uint16_t values with bitWidth in
+//  [1, 4] range.
+// static inline void unpack1to4AVX512(
+//     uint8_t bitWidth,
+//     const uint8_t* FOLLY_NONNULL& inputBuffer,
+//     uint64_t numValues,
+//     uint16_t* FOLLY_NONNULL& outputBuffer) {
+//   uint64_t pdepMask = kPdepMask8[bitWidth];
+
+//   uint64_t numBytesPerTime = (bitWidth * 32 + 7) / 8;
+//   uint64_t shift1 = bitWidth * 8;
+//   uint64_t shift2 = bitWidth * 16;
+//   uint64_t shift3 = bitWidth * 24;
+//   uint64_t numBytes = (numValues * bitWidth + 7) / 8;
+//   alignas(32) uint64_t intermediateValues[4];
+//   auto readEndOffset = inputBuffer + numBytes;
+//   __m512i result;
+
+//   __m512i mask = _mm512_set1_epi32(0x00070007);
+//   __m512i shiftMask = _mm512_set_epi32(
+//       45, 42, 39, 36, 33, 30, 27, 24, 21, 18, 15, 12, 9, 6, 3, 0);
+//   // auto start = std::chrono::system_clock::now();
+//   // Process 4 * bitWidth bytes (32 values) a time.
+//   while (inputBuffer <= readEndOffset - 16) {
+//     // uint64_t val0 = reinterpret_cast<const uint64_t*>(inputBuffer)[0];
+//     // uint64_t val1 = reinterpret_cast<const uint64_t*>(inputBuffer)[1];
+
+//     // // 8 -> 512 (64 bit mask)
+//     // // 0f0f0f0f0f
+//     // // _mm512_maskz_compress_epi8
+
+//     // intermediateValues[0] = _pdep_u64(val0, pdepMask);
+//     // intermediateValues[1] = _pdep_u64(val0 >> shift1, pdepMask);
+
+//     // intermediateValues[2] = _pdep_u64(val1, pdepMask);
+//     // intermediateValues[3] = _pdep_u64(val1 >> shift1, pdepMask);
+//     // result = _mm512_cvtepu8_epi16(_mm256_load_si256(
+//     //     reinterpret_cast<const __m256i*>(intermediateValues)));
+//     // _mm512_storeu_si512(reinterpret_cast<__m512i*>(outputBuffer), result);
+
+//     // Using memcpy() here may result in non-optimized loops by clong.
+//     uint64_t val = *reinterpret_cast<const uint64_t*>(inputBuffer);
+//     __m512i data = _mm512_set1_epi64(val);
+//     __m512i cm = _mm512_multishift_epi64_epi8(shiftMask, data);
+//     cm = _mm512_and_epi32(cm, mask);
+//     _mm512_storeu_epi8(outputBuffer, cm);
+//     // result = _mm256_cvtepu8_epi16(
+//     //     _mm_load_si128(reinterpret_cast<const
+//     //     __m128i*>(intermediateValues)));
+//     // _mm256_storeu_si256(reinterpret_cast<__m256i*>(outputBuffer), result);
+//     // *(reinterpret_cast<uint64_t*>(result)) = _pdep_u64(val, mask);
+//     inputBuffer += bitWidth * 2;
+//     result += 16;
+
+//     inputBuffer += numBytesPerTime;
+//     outputBuffer += 32;
+//   }
+//   // auto end = std::chrono::system_clock::now();
+//   // auto duration =
+//   //     std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+//   // std::cout << "avx512 unpack takes " << duration.count() << "
+//   microseconds"
+//   //           << std::endl;
+
+//   alignas(32) uint64_t intermediateValuesN[2];
+//   // Finish the last batch which has < 16 bytes. Now Process 16 values a
+//   // time.
+//   while (inputBuffer <= readEndOffset - 8) {
+//     uint64_t val = *reinterpret_cast<const uint64_t*>(inputBuffer);
+
+//     intermediateValuesN[0] = _pdep_u64(val, pdepMask);
+//     intermediateValuesN[1] = _pdep_u64(val >> shift1, pdepMask);
+//     __m512i result = _mm512_cvtepu8_epi16(_mm256_load_si256(
+//         reinterpret_cast<const __m256i*>(intermediateValuesN)));
+//     _mm512_storeu_si512(reinterpret_cast<__m512i*>(outputBuffer), result);
+
+//     inputBuffer += bitWidth * 2;
+//     outputBuffer += 16;
+//   }
+
+//   // Finish the last batch which has < 8 bytes. Now Process 8 values a time.
+//   uint64_t val = 0;
+//   while (inputBuffer < readEndOffset) {
+//     std::memcpy(&val, inputBuffer, bitWidth);
+
+//     uint64_t intermediateValues = _pdep_u64(val, pdepMask);
+//     __m512i result = _mm512_cvtepu8_epi16(_mm256_load_si256(
+//         reinterpret_cast<const __m256i*>(&intermediateValues)));
+//     _mm512_storeu_si512(reinterpret_cast<__m512i*>(outputBuffer), result);
+
+//     inputBuffer += bitWidth;
+//     outputBuffer += 8;
+//   }
+// }
+
+// template <typename T>
+// inline void unpackAVX512_new(
+//     const uint8_t* FOLLY_NONNULL& inputBits,
+//     uint64_t inputBufferLen,
+//     uint64_t numValues,
+//     uint8_t bitWidth,
+//     T* FOLLY_NONNULL& result) {
+//   unpackNaive<T>(inputBits, inputBufferLen, numValues, bitWidth, result);
+// }
+
+// template <>
+// inline void unpackAVX512_new<uint8_t>(
+//     const uint8_t* FOLLY_NONNULL& src_ptr,
+//     uint64_t inputBufferLen,
+//     uint64_t values_to_read,
+//     uint8_t bitWidth,
+//     uint8_t* FOLLY_NONNULL& dst_ptr) {
+//   uint64_t bit_mask0 = 0x00001f000000001fLLU;
+//   uint64_t bit_mask1 = 0x000000001f000000LLU;
+//   uint64_t bit_mask2 = 0x001f000000001f00LLU;
+//   uint64_t bit_mask3 = 0x0000001f00000000LLU;
+//   uint64_t bit_mask4 = 0x1f000000001f0000LLU;
+//   uint16_t mask = OWN_5_BIT_MASK;
+
+//   if (values_to_read >= 64u) {
+//     __mmask64 read_mask = 0xFFFFFFFFFF;
+//     __m512i parse_mask = _mm512_set1_epi8(0x1F);
+//     __m512i permutex_idx_ptr[2];
+//     permutex_idx_ptr[0] = _mm512_load_si512(p_permutex_masks_5u);
+//     permutex_idx_ptr[1] = _mm512_load_si512(p_permutex_masks_5u + 16u);
+
+//     __m512i shift_mask_ptr[2];
+//     shift_mask_ptr[0] = _mm512_load_si512(shift_table_5u_0);
+//     shift_mask_ptr[1] = _mm512_load_si512(shift_table_5u_1);
+
+//     while (values_to_read >= 64u) {
+//       __m512i srcmm0, srcmm1, zmm[2];
+
+//       srcmm0 = _mm512_maskz_loadu_epi8(read_mask, src_ptr);
+//       srcmm1 = _mm512_maskz_loadu_epi8(read_mask >> 1u, src_ptr + 1u);
+
+//       // permuting so in zmm[0] will be elements with even indexes and in
+//       zmm[1]
+//       // - with odd ones
+//       zmm[0] = _mm512_permutex2var_epi16(srcmm0, permutex_idx_ptr[0],
+//       srcmm1); zmm[1] = _mm512_permutex2var_epi16(srcmm0,
+//       permutex_idx_ptr[1], srcmm1);
+
+//       // shifting elements so they start from the start of the word
+//       zmm[0] = _mm512_srlv_epi16(zmm[0], shift_mask_ptr[0]);
+//       zmm[1] = _mm512_sllv_epi16(zmm[1], shift_mask_ptr[1]);
+
+//       // gathering even and odd elements together
+//       zmm[0] = _mm512_mask_mov_epi8(zmm[0], 0xAAAAAAAAAAAAAAAA, zmm[1]);
+//       zmm[0] = _mm512_and_si512(zmm[0], parse_mask);
+
+//       _mm512_storeu_si512(dst_ptr, zmm[0]);
+
+//       src_ptr += 8u * 5u;
+//       dst_ptr += 64u;
+//       values_to_read -= 64u;
+//     }
+//   }
+//   if (values_to_read > 16u) {
+//     bit_byte_pool64_t bit_byte_pool64;
+//     uint64_t* tmp_src64 = (uint64_t*)src_ptr;
+//     uint64_t src64 = *tmp_src64;
+//     src_ptr = src_ptr + sizeof(uint64_t);
+//     uint16_t* tmp_src16 = (uint16_t*)src_ptr;
+//     uint16_t src16 = *tmp_src16;
+//     src_ptr = src_ptr + sizeof(uint16_t);
+
+//     bit_byte_pool64.bit_buf = src64 & bit_mask0;
+//     dst_ptr[0] = bit_byte_pool64.byte_buf[0];
+//     dst_ptr[8] = bit_byte_pool64.byte_buf[5];
+//     bit_byte_pool64.bit_buf = (src64 >> 1u) & bit_mask1;
+//     dst_ptr[5] = bit_byte_pool64.byte_buf[3];
+//     bit_byte_pool64.bit_buf = (src64 >> 2u) & bit_mask2;
+//     dst_ptr[2] = bit_byte_pool64.byte_buf[1];
+//     dst_ptr[10] = bit_byte_pool64.byte_buf[6];
+//     bit_byte_pool64.bit_buf = (src64 >> 3u) & bit_mask3;
+//     dst_ptr[7] = bit_byte_pool64.byte_buf[4];
+//     bit_byte_pool64.bit_buf = (src64 >> 4u) & bit_mask4;
+//     dst_ptr[4] = bit_byte_pool64.byte_buf[2];
+//     dst_ptr[12] = bit_byte_pool64.byte_buf[7] | (((uint8_t)(src16 & 1u)) <<
+//     4u); bit_byte_pool64.bit_buf = (src64 >> 5u) & bit_mask0; dst_ptr[1] =
+//     bit_byte_pool64.byte_buf[0]; dst_ptr[9] = bit_byte_pool64.byte_buf[5];
+//     bit_byte_pool64.bit_buf = (src64 >> 6u) & bit_mask1;
+//     dst_ptr[6] = bit_byte_pool64.byte_buf[3];
+//     bit_byte_pool64.bit_buf = (src64 >> 7u) & bit_mask2;
+//     dst_ptr[3] = bit_byte_pool64.byte_buf[1];
+//     dst_ptr[11] = bit_byte_pool64.byte_buf[6];
+//     dst_ptr[13] = (uint8_t)((src16 >> 1u) & mask);
+//     dst_ptr[14] = (uint8_t)((src16 >> 6u) & mask);
+//     dst_ptr[15] = (uint8_t)((src16 >> 11u) & mask);
+//     dst_ptr += 16u;
+//     values_to_read -= 16u;
+//   }
+//   if (values_to_read > 8u) {
+//     uint32_t* tmp_src32 = (uint32_t*)src_ptr;
+//     uint32_t src32 = (*tmp_src32);
+//     src_ptr += sizeof(uint32_t);
+//     uint8_t src8 = *src_ptr;
+//     src_ptr++;
+
+//     dst_ptr[0] = (uint8_t)(src32 & (uint32_t)mask);
+//     dst_ptr[1] = (uint8_t)((src32 >> 5u) & (uint32_t)mask);
+//     dst_ptr[2] = (uint8_t)((src32 >> 10u) & (uint32_t)mask);
+//     dst_ptr[3] = (uint8_t)((src32 >> 15u) & (uint32_t)mask);
+//     dst_ptr[4] = (uint8_t)((src32 >> 20u) & (uint32_t)mask);
+//     dst_ptr[5] = (uint8_t)((src32 >> 25u) & (uint32_t)mask);
+//     dst_ptr[6] = (uint8_t)((src32 >> 30u) & (uint32_t)mask) |
+//         ((src8 << 2u) & (uint8_t)mask);
+//     dst_ptr[7] = ((src8 >> 3u) & (uint8_t)mask);
+
+//     dst_ptr += 8u;
+//     values_to_read -= 8u;
+//   }
+//   if (0u < values_to_read) {
+//     uint16_t next_byte;
+//     uint32_t bits_in_buf = OWN_BYTE_WIDTH;
+//     uint16_t src = (uint16_t)(*src_ptr);
+//     src_ptr++;
+//     while (0u != values_to_read) {
+//       if (5u > bits_in_buf) {
+//         next_byte = (uint16_t)(*src_ptr);
+//         src_ptr++;
+//         next_byte = next_byte << bits_in_buf;
+//         src = src | next_byte;
+//         bits_in_buf += OWN_BYTE_WIDTH;
+//       }
+//       *dst_ptr = (uint8_t)(src & mask);
+//       src = src >> 5u;
+//       bits_in_buf -= 5u;
+//       dst_ptr++;
+//       values_to_read--;
+//     }
+//   }
+//   // return src_ptr;
+// }
+
+// template <>
+// inline void unpackAVX512_new<uint8_t>(
+//     const uint8_t* FOLLY_NONNULL& inputBits,
+//     uint64_t inputBufferLen,
+//     uint64_t numValues,
+//     uint8_t bitWidth,
+//     uint8_t* FOLLY_NONNULL& result) {
+//   VELOX_CHECK(bitWidth >= 1 && bitWidth <= 8);
+//   VELOX_CHECK((numValues & 0x7) == 0);
+//   VELOX_CHECK(inputBufferLen * 8 >= bitWidth * numValues);
+
+// #if XSIMD_WITH_AVX2
+
+//   // uint64_t mask = kPdepMask8[bitWidth];
+//   __m512i mask = _mm512_set1_epi32(0x07070707);
+//   __m512i shiftMask = _mm512_set_epi8(
+//       21,
+//       18,
+//       15,
+//       12,
+//       9,
+//       6,
+//       3,
+//       0,
+//       21,
+//       18,
+//       15,
+//       12,
+//       9,
+//       6,
+//       3,
+//       0,
+//       21,
+//       18,
+//       15,
+//       12,
+//       9,
+//       6,
+//       3,
+//       0,
+//       21,
+//       18,
+//       15,
+//       12,
+//       9,
+//       6,
+//       3,
+//       0,
+//       21,
+//       18,
+//       15,
+//       12,
+//       9,
+//       6,
+//       3,
+//       0,
+//       21,
+//       18,
+//       15,
+//       12,
+//       9,
+//       6,
+//       3,
+//       0,
+//       21,
+//       18,
+//       15,
+//       12,
+//       9,
+//       6,
+//       3,
+//       0,
+//       21,
+//       18,
+//       15,
+//       12,
+//       9,
+//       6,
+//       3,
+//       0);
+//   uint64_t numBytes = (numValues * bitWidth + 7) / 8;
+//   auto readEndOffset = inputBits + numBytes;
+
+//   // Process bitWidth bytes (8 values) a time. Note that for bitWidth 8, the
+//   // performance of direct memcpy is about the same as this solution.
+//   while (inputBits <= readEndOffset - 24) {
+//     // Using memcpy() here may result in non-optimized loops by clong.
+//     __m512i val = _mm512_maskz_expandloadu_epi8(0x0707070707070707,
+//     inputBits);
+//     // uint64_t val = *reinterpret_cast<const uint64_t*>(inputBits);
+//     // __m512i data = _mm512_set1_epi64(val);
+//     __m512i out = _mm512_multishift_epi64_epi8(shiftMask, val);
+//     out = _mm512_and_epi32(out, mask);
+//     _mm512_storeu_epi8(result, out);
+//     // *(reinterpret_cast<uint64_t*>(result)) = _pdep_u64(val, mask);
+//     inputBits += bitWidth * 8;
+//     result += 64;
+//   }
+
+//   // last batch of multiple 8 values that is less than 24 bytes
+//   uint64_t value = 0;
+//   while (inputBits < readEndOffset) {
+//     std::memcpy(&value, inputBits, bitWidth);
+
+//     __m512i val = _mm512_maskz_expandloadu_epi8(0x0707070707070707, &value);
+//     // uint64_t val = *reinterpret_cast<const uint64_t*>(inputBits);
+//     // __m512i data = _mm512_set1_epi64(val);
+//     __m512i out = _mm512_multishift_epi64_epi8(shiftMask, val);
+//     out = _mm512_and_epi32(out, mask);
+//     _mm512_storeu_epi8(result, out);
+//     // *(reinterpret_cast<uint64_t*>(result)) = _pdep_u64(val, mask);
+//     inputBits += bitWidth * 8;
+//     result += 64;
+//   }
+
+// #else
+
+//   unpackNaive<uint8_t>(inputBits, inputBufferLen, numValues, bitWidth,
+//   result);
+
+// #endif
+// }
+
+// template <>
+// inline void unpackAVX512_new<uint16_t>(
+//     const uint8_t* FOLLY_NONNULL& inputBits,
+//     uint64_t inputBufferLen,
+//     uint64_t numValues,
+//     uint8_t bitWidth,
+//     uint16_t* FOLLY_NONNULL& result);
+
+// template <>
+// inline void unpackAVX512_new<uint16_t>(
+//     const uint8_t* FOLLY_NONNULL& inputBits,
+//     uint64_t inputBufferLen,
+//     uint64_t numValues,
+//     uint8_t bitWidth,
+//     uint16_t* FOLLY_NONNULL& result) {
+//   VELOX_CHECK(bitWidth >= 1 && bitWidth <= 16);
+//   VELOX_CHECK((numValues & 0x7) == 0);
+//   VELOX_CHECK(inputBufferLen * 8 >= bitWidth * numValues);
+
+// #if XSIMD_WITH_AVX2
+
+//   switch (bitWidth) {
+//     case 1:
+//     case 2:
+//     case 3:
+//     case 4:
+//       unpack1to4AVX512(bitWidth, inputBits, numValues, result);
+//       break;
+//     case 5:
+//     case 6:
+//     case 7:
+//       unpack1to4AVX512(bitWidth, inputBits, numValues, result);
+//       break;
+//     case 8:
+//       unpack8_cast(inputBits, numValues, result);
+//       break;
+//     case 9:
+//     case 11:
+//     case 13:
+//     case 15:
+//     case 10:
+//     case 12:
+//     case 14:
+//       unpack9to15(bitWidth, inputBits, numValues, result);
+//       break;
+//     case 16:
+//       unpack16(inputBits, numValues, result);
+//       break;
+//     default:
+//       VELOX_UNREACHABLE("invalid bitWidth");
+//   }
+// #else
+
+//   unpackNaive<uint16_t>(inputBits, inputBufferLen, numValues, bitWidth,
+//   result);
+
+// #endif
+// }
+
+template <typename T>
+void unpackAVX512(
+    const uint64_t* bits,
+    int32_t bitOffset,
+    RowSet rows,
+    int32_t rowBias,
+    uint8_t bitWidth,
+    int64_t numBytes,
+    T* result) {
+  VELOX_CHECK(bitWidth >= 0 && bitWidth <= sizeof(T) * 8);
+  const uint8_t* data = reinterpret_cast<const uint8_t*>(bits);
+  // selected rows unpack to be supported
+  int64_t numRows = rows.size();
+  impala::BitPacking::UnpackValuesQPL(
+      bitWidth, data, numBytes, numRows, result);
 }
 
 } // namespace facebook::velox::dwio::common

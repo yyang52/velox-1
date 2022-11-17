@@ -34,3 +34,7 @@ if(VELOX_ENABLE_PARQUET)
 endif()
 
 add_subdirectory(type)
+
+set_source_files_properties(
+    common/BitPackDecoder.cpp
+    PROPERTIES COMPILE_OPTIONS "-march=native")

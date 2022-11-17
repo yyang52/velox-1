@@ -64,6 +64,9 @@ target_link_libraries(
 
 if(${VELOX_ENABLE_ARROW})
 
+  set_source_files_properties(
+    RleBpDecoderTest.cpp
+    PROPERTIES COMPILE_OPTIONS "-march=native")
   add_executable(velox_dwio_parquet_rlebp_decoder_test RleBpDecoderTest.cpp)
   add_test(
     NAME velox_dwio_parquet_rlebp_decoder_test
