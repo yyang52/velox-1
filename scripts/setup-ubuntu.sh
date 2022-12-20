@@ -53,6 +53,12 @@ sudo --preserve-env apt install -y \
   tzdata \
   wget
 
+# sudo update-alternatives --install /usr/bin/cc cc /usr/bin/clang-12 10
+# sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-12 10
+
+# sudo update-alternatives --config c++
+# sudo update-alternatives --config cc
+
 function run_and_time {
   time "$@"
   { echo "+ Finished running $*"; } 2> /dev/null

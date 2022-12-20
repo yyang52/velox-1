@@ -985,6 +985,11 @@ inline const uint8_t* unpack_3u8u(
       zmm[0] = _mm512_and_si512(zmm[0], parse_mask);
 
       _mm512_storeu_si512(dst_ptr, zmm[0]);
+      // __m256i result = _mm512_extracti64x4_epi64(zmm[0], 0);
+      // __m256i result = _mm512_castsi512_si256(zmm[0]);
+      // _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), result);
+      // result = _mm512_extracti64x4_epi64(zmm[0], 1);
+      // _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), result);
 
       src_ptr += 8u * 3u;
       dst_ptr += 64u;

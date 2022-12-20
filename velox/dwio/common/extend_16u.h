@@ -31,12 +31,31 @@ inline void extend_16u32u(const __m512i src, uint32_t* dst_ptr) {
   __m256i tmp = _mm512_extracti64x4_epi64(src, 0);
   __m512i result = _mm512_cvtepu16_epi32(tmp);
   _mm512_storeu_si512(dst_ptr, result);
-  dst_ptr += 32;
+  dst_ptr += 16;
 
   tmp = _mm512_extracti64x4_epi64(src, 1);
   result = _mm512_cvtepu16_epi32(tmp);
   _mm512_storeu_si512(dst_ptr, result);
-  dst_ptr += 32;
+  dst_ptr += 16;
+  // __m128i tmp = _mm512_extracti32x4_epi32(src, 0);
+  // __m256i result = _mm256_cvtepu16_epi32(tmp);
+  // _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), result);
+  // dst_ptr += 8;
+
+  // tmp = _mm512_extracti32x4_epi32(src, 1);
+  // result = _mm256_cvtepu16_epi32(tmp);
+  // _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), result);
+  // dst_ptr += 8;
+
+  // tmp = _mm512_extracti32x4_epi32(src, 2);
+  // result = _mm256_cvtepu16_epi32(tmp);
+  // _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), result);
+  // dst_ptr += 8;
+
+  // tmp = _mm512_extracti32x4_epi32(src, 3);
+  // result = _mm256_cvtepu16_epi32(tmp);
+  // _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), result);
+  // dst_ptr += 8;
 }
 
 inline void extend_16u64u(const __m512i src, uint64_t* dst_ptr) {

@@ -40,15 +40,29 @@ inline void extend_8u16u_tail(
 }
 
 inline void extend_8u16u(const __m512i src, uint16_t* dst_ptr) {
-  __m256i tmp = _mm512_extracti64x4_epi64(src, 0);
-  __m512i result = _mm512_cvtepu8_epi16(tmp);
-  _mm512_storeu_si512(dst_ptr, result);
-  dst_ptr += 32;
+  // __m256i tmp = _mm512_extracti64x4_epi64(src, 0);
+  // __m512i result = _mm512_cvtepu8_epi16(tmp);
+  // _mm512_storeu_si512(dst_ptr, result);
+  __m128i tmp = _mm512_extracti32x4_epi32(src, 0);
+  // __m128i tmp = _mm512_castsi512_si128(src);
+  __m256i result = _mm256_cvtepu8_epi16(tmp);
+  _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), result);
+  dst_ptr += 16;
 
-  tmp = _mm512_extracti64x4_epi64(src, 1);
-  result = _mm512_cvtepu8_epi16(tmp);
-  _mm512_storeu_si512(dst_ptr, result);
-  dst_ptr += 32;
+  tmp = _mm512_extracti32x4_epi32(src, 1);
+  result = _mm256_cvtepu8_epi16(tmp);
+  _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), result);
+  dst_ptr += 16;
+
+  tmp = _mm512_extracti32x4_epi32(src, 2);
+  result = _mm256_cvtepu8_epi16(tmp);
+  _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), result);
+  dst_ptr += 16;
+
+  tmp = _mm512_extracti32x4_epi32(src, 3);
+  result = _mm256_cvtepu8_epi16(tmp);
+  _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), result);
+  dst_ptr += 16;
 }
 
 inline void extend_8u32u_tail(
@@ -65,6 +79,47 @@ inline void extend_8u32u_tail(
 }
 
 inline void extend_8u32u(const __m512i src, uint32_t* dst_ptr) {
+  // __m128i tmp = _mm512_extracti32x4_epi32(src, 0);
+  // // __m128i tmp = _mm512_castsi512_si128(src);
+  // __m512i result = _mm512_cvtepu8_epi32(tmp);
+  // // _mm512_storeu_si512(dst_ptr, result);
+  // __m256i half = _mm512_extracti64x4_epi64(result, 0);
+  // _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), half);
+  // dst_ptr += 8u;
+  // half = _mm512_extracti64x4_epi64(result, 1);
+  // _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), half);
+  // dst_ptr += 8u;
+
+  // tmp = _mm512_extracti32x4_epi32(src, 1);
+  // result = _mm512_cvtepu8_epi32(tmp);
+  // // _mm512_storeu_si512(dst_ptr, result);
+  // half = _mm512_extracti64x4_epi64(result, 0);
+  // _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), half);
+  // dst_ptr += 8u;
+  // half = _mm512_extracti64x4_epi64(result, 1);
+  // _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), half);
+  // dst_ptr += 8u;
+
+  // tmp = _mm512_extracti32x4_epi32(src, 2);
+  // result = _mm512_cvtepu8_epi32(tmp);
+  // // _mm512_storeu_si512(dst_ptr, result);
+  // half = _mm512_extracti64x4_epi64(result, 0);
+  // _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), half);
+  // dst_ptr += 8u;
+  // half = _mm512_extracti64x4_epi64(result, 1);
+  // _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), half);
+  // dst_ptr += 8u;
+
+  // tmp = _mm512_extracti32x4_epi32(src, 3);
+  // result = _mm512_cvtepu8_epi32(tmp);
+  // // _mm512_storeu_si512(dst_ptr, result);
+  // half = _mm512_extracti64x4_epi64(result, 0);
+  // _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), half);
+  // dst_ptr += 8u;
+  // half = _mm512_extracti64x4_epi64(result, 1);
+  // _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst_ptr), half);
+  // dst_ptr += 8u;
+
   __m128i tmp = _mm512_extracti32x4_epi32(src, 0);
   __m512i result = _mm512_cvtepu8_epi32(tmp);
   _mm512_storeu_si512(dst_ptr, result);
@@ -84,6 +139,32 @@ inline void extend_8u32u(const __m512i src, uint32_t* dst_ptr) {
   result = _mm512_cvtepu8_epi32(tmp);
   _mm512_storeu_si512(dst_ptr, result);
   dst_ptr += 16u;
+
+  // __m512i am = _mm512_set_epi32(
+  //     56, 48, 40, 32, 24, 16, 8, 0, 56, 48, 40, 32, 24, 16, 8, 0);
+  // uint64_t mask = 0x1111111111111111;
+  // // First unpack as many full batches as possible.
+  // // in64_pos = reinterpret_cast<const uint64_t*>(in_pos);
+  // // __m512i data = _mm512_set1_epi64(in64_pos[0]);
+  // __m512i cm = _mm512_maskz_multishift_epi64_epi8(mask, am, src);
+  // // cm = _mm512_and_epi32(cm, mask);
+  // _mm512_storeu_epi8(dst_ptr, cm);
+  // dst_ptr += 16u;
+
+  // cm = _mm512_maskz_multishift_epi64_epi8(mask, am, src);
+  // // cm = _mm512_and_epi32(cm, mask);
+  // _mm512_storeu_epi8(dst_ptr, cm);
+  // dst_ptr += 16u;
+
+  // cm = _mm512_maskz_multishift_epi64_epi8(mask, am, src);
+  // // cm = _mm512_and_epi32(cm, mask);
+  // _mm512_storeu_epi8(dst_ptr, cm);
+  // dst_ptr += 16u;
+
+  // cm = _mm512_maskz_multishift_epi64_epi8(mask, am, src);
+  // // cm = _mm512_and_epi32(cm, mask);
+  // _mm512_storeu_epi8(dst_ptr, cm);
+  // dst_ptr += 16u;
 }
 
 inline void extend_8u64u(const __m512i src, uint64_t* dst_ptr) {

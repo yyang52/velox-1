@@ -118,8 +118,10 @@ template <typename T>
 void unpackAVX512_new(uint8_t bitWidth, T* result) {
   const uint8_t* inputIter =
       reinterpret_cast<const uint8_t*>(bitPackedData[bitWidth].data());
-  facebook::velox::dwio::common::unpackAVX512_new<T>(
-      inputIter, BYTES(kNumValues, bitWidth), kNumValues, bitWidth, result);
+  facebook::velox::dwio::common::unpack512(
+      bitWidth, inputIter, kNumValues, result);
+  // facebook::velox::dwio::common::unpackAVX512_new<T>(
+  //     inputIter, BYTES(kNumValues, bitWidth), kNumValues, bitWidth, result);
 }
 
 template <typename T>
@@ -179,14 +181,8 @@ void duckdbBitUnpack(uint8_t bitWidth, T* result) {
   BENCHMARK_RELATIVE(legacy_unpack_fast_fullrows_##width##_8) {  \
     legacyUnpackFast<uint8_t>(allRows, width, result8.data());   \
   }                                                              \
-  BENCHMARK_RELATIVE(fastpforlib_unpack_fullrows_##width##_8) {  \
-    fastpforlib<uint8_t>(width, result8.data());                 \
-  }                                                              \
   BENCHMARK_RELATIVE(arrow_unpack_fullrows_##width##_8) {        \
     arrowBitUnpack<uint8_t>(width, result8.data());              \
-  }                                                              \
-  BENCHMARK_RELATIVE(duckdb_unpack_fullrows_##width##_8) {       \
-    duckdbBitUnpack<uint8_t>(width, result8.data());             \
   }                                                              \
   BENCHMARK_DRAW_LINE();
 
@@ -227,6 +223,9 @@ void duckdbBitUnpack(uint8_t bitWidth, T* result) {
   BENCHMARK_RELATIVE(legacy_unpack_fast_fullrows_##width##_32) {  \
     legacyUnpackFast<uint32_t>(allRows, width, result32.data());  \
   }                                                               \
+  BENCHMARK_RELATIVE(lemirebmi_unpack_fullrows_##width##_32) {    \
+    lemirebmi2(width, result32.data());                           \
+  }                                                               \
   BENCHMARK_RELATIVE(fastpforlib_unpack_fullrows_##width##_32) {  \
     fastpforlib<uint32_t>(width, result32.data());                \
   }                                                               \
@@ -238,12 +237,9 @@ void duckdbBitUnpack(uint8_t bitWidth, T* result) {
   }                                                               \
   BENCHMARK_DRAW_LINE();
 
-// BENCHMARK_RELATIVE(lemirebmi_unpack_fullrows_##width##_32) {    \
-//     lemirebmi2(width, result32.data());                           \
-//   }                                                               \
-  BENCHMARK_RELATIVE(avx512_unpack_fullrows_##width##_8) {       \
-    unpackAVX512<uint8_t>(allRows, width, result8.data());       \
-  }                                                              \
+// BENCHMARK_RELATIVE(avx512_unpack_fullrows_##width##_8) {
+//   unpackAVX512<uint8_t>(allRows, width, result8.data());
+// }
 
 #define BENCHMARK_UNPACK_ODDROWS_CASE_8(width)                  \
   BENCHMARK_RELATIVE(legacy_unpack_naive_oddrows_##width##_8) { \
@@ -272,35 +268,35 @@ void duckdbBitUnpack(uint8_t bitWidth, T* result) {
   }                                                               \
   BENCHMARK_DRAW_LINE();
 
-BENCHMARK_UNPACK_FULLROWS_CASE_8(1)
-BENCHMARK_UNPACK_FULLROWS_CASE_8(2)
-BENCHMARK_UNPACK_FULLROWS_CASE_8(3)
-BENCHMARK_UNPACK_FULLROWS_CASE_8(4)
-BENCHMARK_UNPACK_FULLROWS_CASE_8(5)
-BENCHMARK_UNPACK_FULLROWS_CASE_8(6)
-BENCHMARK_UNPACK_FULLROWS_CASE_8(7)
-BENCHMARK_UNPACK_FULLROWS_CASE_8(8)
+// BENCHMARK_UNPACK_FULLROWS_CASE_8(1)
+// BENCHMARK_UNPACK_FULLROWS_CASE_8(2)
+// BENCHMARK_UNPACK_FULLROWS_CASE_8(3)
+// BENCHMARK_UNPACK_FULLROWS_CASE_8(4)
+// BENCHMARK_UNPACK_FULLROWS_CASE_8(5)
+// BENCHMARK_UNPACK_FULLROWS_CASE_8(6)
+// BENCHMARK_UNPACK_FULLROWS_CASE_8(7)
+// BENCHMARK_UNPACK_FULLROWS_CASE_8(8)
 
-BENCHMARK_DRAW_LINE();
+// BENCHMARK_DRAW_LINE();
 
-BENCHMARK_UNPACK_FULLROWS_CASE_16(1)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(2)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(3)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(4)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(5)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(6)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(7)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(8)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(9)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(10)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(11)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(12)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(13)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(14)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(15)
-BENCHMARK_UNPACK_FULLROWS_CASE_16(16)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(1)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(2)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(3)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(4)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(5)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(6)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(7)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(8)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(9)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(10)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(11)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(12)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(13)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(14)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(15)
+// BENCHMARK_UNPACK_FULLROWS_CASE_16(16)
 
-BENCHMARK_DRAW_LINE();
+// BENCHMARK_DRAW_LINE();
 
 BENCHMARK_UNPACK_FULLROWS_CASE_32(1)
 BENCHMARK_UNPACK_FULLROWS_CASE_32(2)
@@ -309,19 +305,31 @@ BENCHMARK_UNPACK_FULLROWS_CASE_32(4)
 BENCHMARK_UNPACK_FULLROWS_CASE_32(5)
 BENCHMARK_UNPACK_FULLROWS_CASE_32(6)
 BENCHMARK_UNPACK_FULLROWS_CASE_32(7)
-BENCHMARK_UNPACK_FULLROWS_CASE_32(8)
-BENCHMARK_UNPACK_FULLROWS_CASE_32(9)
-BENCHMARK_UNPACK_FULLROWS_CASE_32(10)
-BENCHMARK_UNPACK_FULLROWS_CASE_32(11)
-BENCHMARK_UNPACK_FULLROWS_CASE_32(13)
-BENCHMARK_UNPACK_FULLROWS_CASE_32(15)
-BENCHMARK_UNPACK_FULLROWS_CASE_32(17)
-BENCHMARK_UNPACK_FULLROWS_CASE_32(19)
-BENCHMARK_UNPACK_FULLROWS_CASE_32(21)
-BENCHMARK_UNPACK_FULLROWS_CASE_32(24)
-BENCHMARK_UNPACK_FULLROWS_CASE_32(28)
-BENCHMARK_UNPACK_FULLROWS_CASE_32(30)
-BENCHMARK_UNPACK_FULLROWS_CASE_32(32)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(8)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(9)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(10)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(11)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(12)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(13)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(14)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(15)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(16)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(17)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(18)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(19)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(20)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(21)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(22)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(23)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(24)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(25)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(26)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(27)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(28)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(29)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(30)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(31)
+// BENCHMARK_UNPACK_FULLROWS_CASE_32(32)
 
 // BENCHMARK_DRAW_LINE();
 

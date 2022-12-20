@@ -18,7 +18,7 @@ BUILD_DIR=release
 BUILD_TYPE=Release
 BENCHMARKS_BASIC_DIR=$(BUILD_BASE_DIR)/$(BUILD_DIR)/velox/benchmarks/basic/
 BENCHMARKS_DUMP_DIR=dumps
-TREAT_WARNINGS_AS_ERRORS ?= 1
+TREAT_WARNINGS_AS_ERRORS ?= 0
 ENABLE_WALL ?= 1
 
 # Option to make a minimal build. By default set to "OFF"; set to
@@ -80,7 +80,7 @@ cmake:					#: Use CMake to create a Makefile build system
 		${EXTRA_CMAKE_FLAGS}
 
 build:					#: Build the software based in BUILD_DIR and BUILD_TYPE variables
-	cmake --build $(BUILD_BASE_DIR)/$(BUILD_DIR) -j $(NUM_THREADS)
+	cmake --build $(BUILD_BASE_DIR)/$(BUILD_DIR) -j 112  
 
 debug:					#: Build with debugging symbols
 	$(MAKE) cmake BUILD_DIR=debug BUILD_TYPE=Debug

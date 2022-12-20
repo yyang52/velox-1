@@ -25,6 +25,7 @@ services:
     build:
       context: .
       dockerfile: scripts/ubuntu-22.04-cpp.dockerfile
+    privileged: true
     environment:
       NUM_THREADS: 8 # default value for NUM_THREADS
       VELOX_DEPENDENCY_SOURCE: BUNDLED # Build dependencies from source
