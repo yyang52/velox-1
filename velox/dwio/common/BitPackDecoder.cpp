@@ -327,4 +327,272 @@ template void unpack(
     const char* bufferEnd,
     int16_t* result);
 
+#ifdef VELOX_ENABLE_AVX512
+template <>
+void unpackAVX512<uint8_t>(
+    const uint8_t* FOLLY_NONNULL& inputBits,
+    uint64_t inputBufferLen,
+    uint64_t numValues,
+    uint8_t bitWidth,
+    uint8_t* FOLLY_NONNULL& result) {
+  switch (bitWidth) {
+    case 1:
+      unpack1(inputBits, numValues, result);
+      break;
+    case 2:
+      unpack2(inputBits, numValues, result);
+      break;
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+      unpack3to7u(bitWidth, inputBits, numValues, result);
+      break;
+    case 8:
+      unpack8(inputBits, numValues, result);
+      break;
+    default:
+      VELOX_UNREACHABLE("invalid bitWidth");
+  }
+}
+
+template <>
+void unpackAVX512<uint16_t>(
+    const uint8_t* FOLLY_NONNULL& inputBits,
+    uint64_t inputBufferLen,
+    uint64_t numValues,
+    uint8_t bitWidth,
+    uint16_t* FOLLY_NONNULL& result) {
+  switch (bitWidth) {
+    case 1:
+      unpack1(inputBits, numValues, result);
+      break;
+    case 2:
+      unpack2(inputBits, numValues, result);
+      break;
+    case 3:
+      unpack3(inputBits, numValues, result);
+      break;
+    case 4:
+      unpack4(inputBits, numValues, result);
+      break;
+    case 5:
+    case 6:
+    case 7:
+      unpack5to7u(bitWidth, inputBits, numValues, result);
+      break;
+    case 8:
+      unpack8(inputBits, numValues, result);
+      break;
+    case 9:
+    case 10:
+    case 11:
+    case 12:
+    case 13:
+    case 14:
+    case 15:
+      unpack9to15u(bitWidth, inputBits, numValues, result);
+      break;
+    case 16:
+      unpack16u(inputBits, numValues, result);
+      break;
+    default:
+      VELOX_UNREACHABLE("invalid bitWidth");
+  }
+}
+
+template <>
+void unpackAVX512<uint32_t>(
+    const uint8_t* FOLLY_NONNULL& inputBits,
+    uint64_t inputBufferLen,
+    uint64_t numValues,
+    uint8_t bitWidth,
+    uint32_t* FOLLY_NONNULL& result) {
+  switch (bitWidth) {
+    case 1:
+      unpack1(inputBits, numValues, result);
+      break;
+    case 2:
+      unpack2(inputBits, numValues, result);
+      break;
+    case 3:
+      unpack3(inputBits, numValues, result);
+      break;
+    case 4:
+      unpack4(inputBits, numValues, result);
+      break;
+    case 5:
+    case 6:
+    case 7:
+      unpack5to7u(bitWidth, inputBits, numValues, result);
+      break;
+    case 8:
+      unpack8u(inputBits, numValues, result);
+      break;
+    case 9:
+    case 10:
+    case 11:
+    case 12:
+    case 14:
+      unpack9to15u(bitWidth, inputBits, numValues, result);
+      break;
+    case 13:
+      unpack13(inputBits, numValues, result);
+      break;
+    case 15:
+      unpack15(inputBits, numValues, result);
+      break;
+    case 16:
+      unpack16u(inputBits, numValues, result);
+      break;
+    case 17:
+    case 18:
+    case 19:
+    case 20:
+    case 21:
+    case 22:
+    case 23:
+    case 24:
+    case 25:
+    case 26:
+    case 27:
+    case 28:
+    case 29:
+    case 30:
+    case 31:
+      unpack17to31u(bitWidth, inputBits, numValues, result);
+      break;
+    case 32:
+      unpack32u(inputBits, numValues, result);
+      break;
+    default:
+      VELOX_UNREACHABLE("invalid bitWidth");
+  }
+}
+#endif
+
+template <>
+void unpackAVX2<uint8_t>(
+    const uint8_t* FOLLY_NONNULL& inputBits,
+    uint64_t inputBufferLen,
+    uint64_t numValues,
+    uint8_t bitWidth,
+    uint8_t* FOLLY_NONNULL& result) {
+  uint64_t mask = kPdepMask8[bitWidth];
+  auto writeEndOffset = result + numValues;
+
+  // Process bitWidth bytes (8 values) a time. Note that for bitWidth 8, the
+  // performance of direct memcpy is about the same as this solution.
+  while (result + 8 <= writeEndOffset) {
+    // Using memcpy() here may result in non-optimized loops by clong.
+    uint64_t val = *reinterpret_cast<const uint64_t*>(inputBits);
+    *(reinterpret_cast<uint64_t*>(result)) = _pdep_u64(val, mask);
+    inputBits += bitWidth;
+    result += 8;
+  }
+
+  numValues = writeEndOffset - result;
+  unpackNaive(
+      inputBits, (bitWidth * numValues + 7) / 8, numValues, bitWidth, result);
+}
+
+template <>
+void unpackAVX2<uint16_t>(
+    const uint8_t* FOLLY_NONNULL& inputBits,
+    uint64_t inputBufferLen,
+    uint64_t numValues,
+    uint8_t bitWidth,
+    uint16_t* FOLLY_NONNULL& result) {
+  switch (bitWidth) {
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+      unpack1to4(bitWidth, inputBits, numValues, result);
+      break;
+    case 5:
+    case 6:
+    case 7:
+      unpack5to8(bitWidth, inputBits, numValues, result);
+      break;
+    case 8:
+      unpack8_cast(inputBits, numValues, result);
+      break;
+    case 9:
+    case 11:
+    case 13:
+    case 15:
+    case 10:
+    case 12:
+    case 14:
+      unpack9to15(bitWidth, inputBits, numValues, result);
+      break;
+    case 16:
+      unpack16(inputBits, numValues, result);
+      break;
+    default:
+      VELOX_UNREACHABLE("invalid bitWidth");
+  }
+}
+
+template <>
+void unpackAVX2<uint32_t>(
+    const uint8_t* FOLLY_NONNULL& inputBits,
+    uint64_t inputBufferLen,
+    uint64_t numValues,
+    uint8_t bitWidth,
+    uint32_t* FOLLY_NONNULL& result) {
+  switch (bitWidth) {
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+      unpack1to7(bitWidth, inputBits, numValues, result);
+      break;
+    case 8:
+      unpack8(inputBits, numValues, result);
+      break;
+    case 9:
+    case 10:
+    case 11:
+    case 12:
+    case 13:
+    case 14:
+    case 15:
+      unpack9to15(bitWidth, inputBits, numValues, result);
+      break;
+    case 16:
+      unpack16(inputBits, numValues, result);
+      break;
+    case 17:
+    case 18:
+    case 19:
+    case 20:
+    case 21:
+      unpack17to21(bitWidth, inputBits, numValues, result);
+      break;
+    case 22:
+    case 23:
+    case 24:
+    case 25:
+    case 26:
+    case 27:
+    case 28:
+    case 29:
+    case 30:
+    case 31:
+      unpack22to31(bitWidth, inputBits, numValues, result);
+      break;
+    case 32:
+      unpack32(inputBits, numValues, result);
+      break;
+    default:
+      VELOX_UNREACHABLE("invalid bitWidth");
+  }
+}
+
 } // namespace facebook::velox::dwio::common
