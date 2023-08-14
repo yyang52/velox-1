@@ -83,6 +83,16 @@ function prompt {
   ) 2> /dev/null
 }
 
+function install_protobuf {
+  wget https://github.com/protocolbuffers/protobuf/releases/download/v21.4/protobuf-all-21.4.tar.gz
+  tar -xzf protobuf-all-21.4.tar.gz
+  cd protobuf-21.4
+  ./configure  --prefix=/usr/local
+  make "-j$(nproc)"
+  sudo make install
+  sudo ldconfig
+}
+
 function install_fmt {
   github_checkout fmtlib/fmt 8.0.1
   cmake_install -DFMT_TEST=OFF
@@ -117,11 +127,12 @@ function install_conda {
 
 function install_velox_deps {
   run_and_time install_fmt
+  run_and_time install_protobuf
   run_and_time install_folly
   run_and_time install_fizz
   run_and_time install_wangle
   run_and_time install_fbthrift
-  run_and_time install_conda
+  #run_and_time install_conda
 }
 
 (return 2> /dev/null) && return # If script was sourced, don't run commands.
